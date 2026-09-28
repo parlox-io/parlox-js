@@ -1,0 +1,22 @@
+{
+  "name": "parlox-js",
+  "private": true,
+  "description": "Parlox SDKs: @parlox/browser and @parlox/server",
+  "license": "MIT",
+  "workspaces": [
+    "packages/browser",
+    "packages/server"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "typecheck": "npm run typecheck --workspaces",
+    "test": "npm test --workspaces",
+    "check-types": "attw --pack packages/browser && attw --pack packages/server"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "0.18.5"
+  },
+  "engines": {
+    "node": ">=22.14"
+  }
+}

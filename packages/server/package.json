@@ -1,0 +1,109 @@
+{
+  "name": "@parlox/server",
+  "version": "1.0.0",
+  "description": "Parlox agent analytics for the merchant's server: report AI fetchers, crawlers and confirmed orders. Next.js, Express, Hono, Workers.",
+  "license": "MIT",
+  "homepage": "https://github.com/parlox-io/parlox-js/tree/main/packages/server#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/parlox-io/parlox-js.git",
+    "directory": "packages/server"
+  },
+  "bugs": {
+    "url": "https://github.com/parlox-io/parlox-js/issues"
+  },
+  "keywords": [
+    "analytics",
+    "ai-agents",
+    "crawlers",
+    "ecommerce",
+    "nextjs",
+    "express",
+    "parlox"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/cjs/index.cjs",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/types/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "next": [
+        "./dist/types/next.d.ts"
+      ],
+      "express": [
+        "./dist/types/express.d.ts"
+      ],
+      "fetch": [
+        "./dist/types/fetch.d.ts"
+      ]
+    }
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/types/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.cts",
+        "default": "./dist/cjs/index.cjs"
+      }
+    },
+    "./next": {
+      "import": {
+        "types": "./dist/types/next.d.ts",
+        "default": "./dist/esm/next.js"
+      },
+      "require": {
+        "types": "./dist/cjs/next.d.cts",
+        "default": "./dist/cjs/next.cjs"
+      }
+    },
+    "./express": {
+      "import": {
+        "types": "./dist/types/express.d.ts",
+        "default": "./dist/esm/express.js"
+      },
+      "require": {
+        "types": "./dist/cjs/express.d.cts",
+        "default": "./dist/cjs/express.cjs"
+      }
+    },
+    "./fetch": {
+      "import": {
+        "types": "./dist/types/fetch.d.ts",
+        "default": "./dist/esm/fetch.js"
+      },
+      "require": {
+        "types": "./dist/cjs/fetch.d.cts",
+        "default": "./dist/cjs/fetch.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/esm",
+    "dist/cjs",
+    "dist/types",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node build.mjs && node --test \"test/*.test.mjs\"",
+    "prepublishOnly": "node build.mjs && node --test \"test/*.test.mjs\""
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

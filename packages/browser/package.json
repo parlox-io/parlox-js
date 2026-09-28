@@ -1,0 +1,96 @@
+{
+  "name": "@parlox/browser",
+  "version": "1.0.3",
+  "description": "Parlox agent analytics for storefronts: see which AI agents visit, what they read, where they get stuck and whether they buy.",
+  "license": "MIT",
+  "homepage": "https://github.com/parlox-io/parlox-js/tree/main/packages/browser#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/parlox-io/parlox-js.git",
+    "directory": "packages/browser"
+  },
+  "bugs": {
+    "url": "https://github.com/parlox-io/parlox-js/issues"
+  },
+  "keywords": [
+    "analytics",
+    "ai-agents",
+    "ecommerce",
+    "agentic-commerce",
+    "parlox"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/cjs/index.cjs",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/types/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "react": [
+        "./dist/types/react.d.ts"
+      ]
+    }
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/types/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.cts",
+        "default": "./dist/cjs/index.cjs"
+      }
+    },
+    "./react": {
+      "import": {
+        "types": "./dist/types/react.d.ts",
+        "default": "./dist/esm/react.js"
+      },
+      "require": {
+        "types": "./dist/cjs/react.d.cts",
+        "default": "./dist/cjs/react.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/esm",
+    "dist/cjs",
+    "dist/types",
+    "dist/tag",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node build.mjs && node --test \"test/*.test.mjs\"",
+    "prepublishOnly": "node build.mjs && node --test \"test/*.test.mjs\""
+  },
+  "dependencies": {
+    "@rrweb/record": "2.1.6"
+  },
+  "peerDependencies": {
+    "react": ">=17"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@happy-dom/global-registrator": "^20.14.5",
+    "@types/react": "^19.0.0",
+    "esbuild": "^0.28.2",
+    "react": "^19.3.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

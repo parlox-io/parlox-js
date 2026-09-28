@@ -1,0 +1,81 @@
+# Publishes one package to npm when a release tag is pushed: browser-v1.2.3 or server-v1.2.3.
+#
+# Trusted publishing (OIDC): npm trusts this workflow in this repository, so no npm token exists anywhere, and every
+# version carries a provenance attestation linking it to the commit and run that built it.
+#
+# Two jobs, so the publish credential is never present while third-party code runs: "build" installs dependencies,
+# builds, tests and packs with a read-only token; "publish" runs in the "npm" environment (a maintainer must approve it),
+# installs nothing, and uploads exactly the tarball that was tested.
+name: Release
+on:
+  push:
+    tags: ["browser-v*", "server-v*"]
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      tarball: ${{ steps.pack.outputs.tarball }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.x
+          cache: npm
+      - name: Which package, and does the tag match its version?
+        id: pkg
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          name="${TAG%%-v*}"
+          version="${TAG#*-v}"
+          case "$name" in browser|server) ;; *) echo "unknown package in tag $TAG"; exit 1 ;; esac
+          actual=$(node -p "require('./packages/$name/package.json').version")
+          if [ "$actual" != "$version" ]; then echo "tag says $version, packages/$name/package.json says $actual"; exit 1; fi
+          echo "dir=packages/$name" >> "$GITHUB_OUTPUT"
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run check-types
+      - name: Pack
+        id: pack
+        run: |
+          mkdir -p out
+          file=$(npm pack --workspace "${{ steps.pkg.outputs.dir }}" --pack-destination out --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s)[0].filename))')
+          echo "tarball=$file" >> "$GITHUB_OUTPUT"
+          sha256sum "out/$file"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package
+          path: out/*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write # the OIDC token npm exchanges for a short-lived publish credential
+    steps:
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.x
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm 11.5.1 or later; pinned so the publishing tool itself does not float.
+      - run: npm install -g npm@12.1.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: package
+          path: out
+      - name: Publish the tested tarball
+        run: |
+          sha256sum "out/${{ needs.build.outputs.tarball }}"
+          npm publish "out/${{ needs.build.outputs.tarball }}" --access public
