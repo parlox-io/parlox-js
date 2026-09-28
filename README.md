@@ -7,7 +7,7 @@ Parlox shows merchants which AI agents visit their store, what they read, where 
 | [`@parlox/browser`](packages/browser) | On the store's pages: page views, behaviour, clicks, commerce events; replays of visits by automated browsers (people are never recorded) | `npm install @parlox/browser` |
 | [`@parlox/server`](packages/server) | On the store's server (Next.js, Express, Hono, Workers): AI fetchers and crawlers that never run JavaScript, and confirmed orders | `npm install @parlox/server` |
 
-Stores without a build step use the hosted tag instead, served by Parlox as immutable releases pinned with an integrity hash; it is built from `packages/browser` and ships inside the npm package under `dist/tag/`.
+Stores without a build step use the hosted tag instead, served by Parlox as immutable releases pinned with an integrity hash; it is built from `packages/browser` and ships inside the npm package under `dist/tag/`. Stores on Google Tag Manager can import the template in [`gtm-template/`](gtm-template).
 
 ## Principles for code that runs on a merchant's site
 
