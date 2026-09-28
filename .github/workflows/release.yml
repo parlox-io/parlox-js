@@ -77,5 +77,6 @@ jobs:
           path: out
       - name: Publish the tested tarball
         run: |
-          sha256sum "out/${{ needs.build.outputs.tarball }}"
-          npm publish "out/${{ needs.build.outputs.tarball }}" --access public
+          # "./" makes it a file path: without it npm reads "out/<file>" as GitHub shorthand (user/repo).
+          sha256sum "./out/${{ needs.build.outputs.tarball }}"
+          npm publish "./out/${{ needs.build.outputs.tarball }}" --access public
