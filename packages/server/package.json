@@ -1,7 +1,7 @@
 {
   "name": "@parlox/server",
-  "version": "1.0.0",
-  "description": "Parlox agent analytics for the merchant's server: report AI fetchers, crawlers and confirmed orders. Next.js, Express, Hono, Workers.",
+  "version": "1.1.0",
+  "description": "Parlox agent analytics for the merchant's server: report AI fetchers, crawlers and confirmed orders. Next.js, Express, Hono, Vercel, Workers.",
   "license": "MIT",
   "homepage": "https://github.com/parlox-io/parlox-js/tree/main/packages/server#readme",
   "repository": {
@@ -19,6 +19,8 @@
     "ecommerce",
     "nextjs",
     "express",
+    "hono",
+    "vercel",
     "parlox"
   ],
   "type": "module",
@@ -36,6 +38,12 @@
       ],
       "fetch": [
         "./dist/types/fetch.d.ts"
+      ],
+      "hono": [
+        "./dist/types/hono.d.ts"
+      ],
+      "vercel": [
+        "./dist/types/vercel.d.ts"
       ]
     }
   },
@@ -80,6 +88,26 @@
         "default": "./dist/cjs/fetch.cjs"
       }
     },
+    "./hono": {
+      "import": {
+        "types": "./dist/types/hono.d.ts",
+        "default": "./dist/esm/hono.js"
+      },
+      "require": {
+        "types": "./dist/cjs/hono.d.cts",
+        "default": "./dist/cjs/hono.cjs"
+      }
+    },
+    "./vercel": {
+      "import": {
+        "types": "./dist/types/vercel.d.ts",
+        "default": "./dist/esm/vercel.js"
+      },
+      "require": {
+        "types": "./dist/cjs/vercel.d.cts",
+        "default": "./dist/cjs/vercel.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -92,11 +120,12 @@
   "scripts": {
     "build": "node build.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node build.mjs && node --test \"test/*.test.mjs\"",
-    "prepublishOnly": "node build.mjs && node --test \"test/*.test.mjs\""
+    "test": "node build.mjs && tsc -p tsconfig.test-types.json && node --test",
+    "prepublishOnly": "node build.mjs && node --test"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
+    "hono": "4.13.11",
     "typescript": "^5.7.0"
   },
   "engines": {

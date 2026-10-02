@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 
-const entryPoints = ["src/index.ts", "src/next.ts", "src/express.ts", "src/fetch.ts"];
+const entryPoints = ["src/index.ts", "src/next.ts", "src/express.ts", "src/fetch.ts", "src/hono.ts", "src/vercel.ts"];
 rmSync("dist", { recursive: true, force: true });
 await build({ entryPoints, outdir: "dist/esm", bundle: true, splitting: true, format: "esm", platform: "neutral", target: "es2022", chunkNames: "chunks/[name]-[hash]", logLevel: "error" });
 await build({ entryPoints, outdir: "dist/cjs", outExtension: { ".js": ".cjs" }, bundle: true, format: "cjs", platform: "neutral", target: "es2022", logLevel: "error" });

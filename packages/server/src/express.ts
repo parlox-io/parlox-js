@@ -5,10 +5,12 @@
 //   app.use(parlox());                                   // before your routes
 //
 // Reads PARLOX_SECRET_KEY, PARLOX_VERIFY_TOKEN and PARLOX_IP_HEADER from the environment. It never changes the app's
-// settings (it does not touch Express's "trust proxy", so req.ip means what it meant before), never delays a response
-// and reports after the response has finished.
+// settings (it does not touch Express's "trust proxy", so req.ip means what it meant before) and never delays a
+// response. Reports go after the response has finished: in batches, at most one request to Parlox at a time (see flush
+// below for shutdown), or through Vercel's waitUntil when the app runs on Vercel.
 
-import { createParlox, firstValue, type ParloxServerOptions } from "./core.js";
+import { createParlox, firstValue, flush, type ParloxServerOptions } from "./core.js";
+import { vercelWaitUntil } from "./platform.js";
 
 interface NodeReq {
   method?: string;
@@ -69,10 +71,17 @@ export function parlox(options: ExpressOptions = {}) {
         // (a client that forges it only splits its own requests), then the socket.
         groupingAddress: (req.app?.get?.("trust proxy") ? req.ip : undefined) ?? firstValue(header(req, "x-forwarded-for")) ?? req.socket?.remoteAddress,
       };
-      if (p.shouldReport(info)) res.once("finish", () => { void p.report({ ...info, status: res.statusCode }); });
+      if (p.shouldReport(info)) {
+        // Read here, inside the request: Vercel's request context belongs to it.
+        const waitUntil = vercelWaitUntil();
+        res.once("finish", () => { p.deliver({ ...info, status: res.statusCode }, waitUntil); });
+      }
     } catch { /* Parlox must never break the site */ }
     next();
   };
 }
+
+/** Sends every queued report now, for apps that stop on a signal: `process.on("SIGTERM", () => parlox.flush().then(() => process.exit(0)))`. */
+parlox.flush = flush;
 
 export { createParlox } from "./core.js";
