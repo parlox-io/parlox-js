@@ -9,8 +9,9 @@
 //     await next();
 //     parlox.observe(c.req.raw, c.res.status, (p) => c.executionCtx.waitUntil(p));
 //   });
+//   Without waitUntil (Node or Bun), reports wait in the batching queue; Hono has its own adapter, @parlox/server/hono.
 
-import { createParlox, firstValue, type ParloxServerOptions } from "./core.js";
+import { createParlox, firstValue, flush, ipHeaderFor, namedIpHeader, type ParloxServerOptions } from "./core.js";
 
 export interface FetchOptions extends ParloxServerOptions {
   /** Custom source of the client address; overrides ipHeader. */
@@ -18,6 +19,9 @@ export interface FetchOptions extends ParloxServerOptions {
 }
 
 export function parloxFetch(options: FetchOptions = {}) {
+  // The header named for the client address; when none is, cf-connecting-ip for a request Cloudflare's own network
+  // delivered (it carries the cf object), else none (core.ts, ipHeaderFor).
+  const named = namedIpHeader(options.ipHeader);
   const p = createParlox(options);
   return {
     /** The ownership-check answer for this request, or null to continue. */
@@ -29,23 +33,23 @@ export function parloxFetch(options: FetchOptions = {}) {
     },
     /**
      * Reports the request if it looks automated. Pass the platform's waitUntil so the report outlives the response on
-     * serverless and edge runtimes; without it the report runs as a detached promise.
+     * serverless and edge runtimes; without it (a long-running server) the report waits in the batching queue.
      */
     observe(request: Request, status?: number, waitUntil?: (promise: Promise<unknown>) => void): void {
       try {
         const url = new URL(request.url);
+        const ipHeader = options.clientIp ? null : ipHeaderFor(named, request);
         const info = {
           method: request.method, path: url.pathname, host: url.hostname || null, status,
           header: (n: string) => request.headers.get(n),
-          clientIp: options.clientIp ? options.clientIp(request) : p.ipHeader ? firstValue(request.headers.get(p.ipHeader)) : undefined,
+          clientIp: options.clientIp ? options.clientIp(request) : ipHeader ? firstValue(request.headers.get(ipHeader)) : undefined,
           groupingAddress: firstValue(request.headers.get("x-forwarded-for")) ?? firstValue(request.headers.get("x-real-ip")),
         };
-        if (!p.shouldReport(info)) return;
-        const promise = p.report(info);
-        if (waitUntil) waitUntil(promise);
+        p.deliver(info, waitUntil);
       } catch { /* Parlox must never break the site */ }
     },
     purchase: p.purchase,
+    flush,
   };
 }
 

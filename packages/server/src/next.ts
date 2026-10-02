@@ -18,7 +18,6 @@ export interface NextRequestLike {
   nextUrl: { pathname: string; hostname: string };
 }
 export interface NextFetchEventLike { waitUntil(promise: Promise<unknown>): void }
-type Middleware<R> = (req: NextRequestLike, event: NextFetchEventLike) => R;
 
 export interface NextOptions extends ParloxServerOptions {
   /** Custom source of the client address; overrides ipHeader. */
@@ -46,7 +45,10 @@ function info(parlox: Parlox, req: NextRequestLike, options: NextOptions) {
  * Wraps a Next.js middleware (or none) with Parlox: answers the ownership check, reports automated page requests in
  * the background, then runs the wrapped middleware and returns its result unchanged.
  */
-export function withParlox<R>(middleware?: Middleware<R>, options: NextOptions = {}): Middleware<R | Response | undefined> {
+export function withParlox<Q extends NextRequestLike = NextRequestLike, E extends NextFetchEventLike = NextFetchEventLike, R = undefined>(
+  middleware?: (req: Q, event: E) => R,
+  options: NextOptions = {},
+): (req: Q, event: E) => R | Response | undefined {
   const parlox = createParlox(options);
   return (req, event) => {
     try {

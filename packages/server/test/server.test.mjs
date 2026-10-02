@@ -3,10 +3,19 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { createRequire } from "node:module";
-import { createParlox } from "../dist/esm/index.js";
-import { withParlox } from "../dist/esm/next.js";
-import { parlox as expressParlox } from "../dist/esm/express.js";
-import { parloxFetch } from "../dist/esm/fetch.js";
+import { createParlox as createCore } from "../dist/esm/index.js";
+import { withParlox as nextAdapter } from "../dist/esm/next.js";
+import { parlox as expressAdapter } from "../dist/esm/express.js";
+import { parloxFetch as fetchAdapter } from "../dist/esm/fetch.js";
+import { checkLogLines, tracked } from "../test-support/log-lines.mjs";
+
+// The SDK says an empty secretKey, and a key Parlox refuses, once per instance in the server's log (warnings.test.mjs
+// checks those lines); these tests give an empty key on purpose, so the lines are recorded instead of printed, and the
+// last test checks them: each one the SDK means to write, at most once per instance (test-support/log-lines.mjs).
+const createParlox = tracked(createCore);
+const withParlox = tracked(nextAdapter, 1);
+const expressParlox = tracked(expressAdapter);
+const parloxFetch = tracked(fetchAdapter);
 
 // A stand-in gateway that records what it receives. `hang` makes it never answer (for timeout tests).
 let gateway, endpoint, received = [], hang = false;
@@ -152,7 +161,7 @@ test("next: a Parlox failure never breaks the site", () => {
 // ── Express / Connect adapter, over a real HTTP server ──
 test("express: reports after the response finishes, answers the verify path, leaves people alone", async () => {
   reset();
-  const mw = expressParlox({ secretKey: SECRET, verifyToken: "tok_abc", endpoint, ipHeader: "x-real-ip" });
+  const mw = expressParlox({ secretKey: SECRET, verifyToken: "tok_abc", endpoint, ipHeader: "x-real-ip", flushAt: 1 });
   const app = http.createServer((rq, rs) => mw(rq, rs, () => { rs.statusCode = 200; rs.end("<html>page</html>"); }));
   await new Promise((r) => app.listen(0, "127.0.0.1", r));
   const base = `http://127.0.0.1:${app.address().port}`;
@@ -235,4 +244,9 @@ test("next: a wrapped middleware is never skipped by default (auth keeps guardin
   assert.deepEqual(seen, ["/users/john.doe", "/admin/export.csv", "/products/tent"]);
   await Promise.all(waited);
   assert.deepEqual(received.map((r) => r.body.events[0].path).sort(), ["/admin/export.csv", "/products/tent", "/robots.txt", "/users/john.doe"]);
+});
+
+// Last, after every test above: what the SDK wrote to the log while they ran.
+test("the log lines these tests provoked are the SDK's own, each said at most once per instance", () => {
+  checkLogLines();
 });
