@@ -13,7 +13,7 @@ Stores without a build step use the hosted tag instead, served by Parlox as immu
 
 - Never sets cookies; never reads what visitors type (field names only); strips capability tokens from URLs; reduces referrers to their origin.
 - Every hook is wrapped so it cannot throw into the host page; wrapped platform functions keep their behaviour and return values.
-- The server part never changes framework settings, reads a client address only from a header a proxy the merchant controls sets, and gives up after two seconds without delaying a response.
+- The server part never changes framework settings, reads a client address only from a header a proxy the merchant controls sets, and never delays a response: its reports wait in a bounded queue sent one request at a time, or, where the platform keeps work alive after the response, go at once (at most 64 at a time, each giving up after two seconds).
 - Small, readable, no runtime dependencies except the recorder's (`@rrweb/record`, loaded only for automated browsers).
 
 ## Development

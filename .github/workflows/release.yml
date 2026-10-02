@@ -1,4 +1,4 @@
-# Publishes one package to npm when a release tag is pushed: browser-v1.2.3 or server-v1.2.3.
+# Publishes one package to npm when a release tag is pushed: browser-v1.2.3, server-v1.2.3 or parlox-v1.2.3.
 #
 # Trusted publishing (OIDC): npm trusts this workflow in this repository, so no npm token exists anywhere, and every
 # version carries a provenance attestation linking it to the commit and run that built it.
@@ -6,10 +6,16 @@
 # Two jobs, so the publish credential is never present while third-party code runs: "build" installs dependencies,
 # builds, tests and packs with a read-only token; "publish" runs in the "npm" environment (a maintainer must approve it),
 # installs nothing, and uploads exactly the tarball that was tested.
+#
+# `parlox` (the install wizard) is staged, not published: its trusted publisher allows only `npm stage publish`, so a
+# version goes live only after a maintainer approves it with 2FA on npmjs.com (the package's Staged Packages tab) or with
+# `npm stage approve <stage-id>` — npm's recommended setup, so this workflow alone can never release it. browser and
+# server still publish directly until a staged release has shown its provenance arrives intact (the gateway's import of
+# @parlox/browser refuses a version without it); then they move to staging too.
 name: Release
 on:
   push:
-    tags: ["browser-v*", "server-v*"]
+    tags: ["browser-v*", "server-v*", "parlox-v*"]
 permissions:
   contents: read
 concurrency:
@@ -20,6 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tarball: ${{ steps.pack.outputs.tarball }}
+      name: ${{ steps.pkg.outputs.name }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -35,10 +42,11 @@ jobs:
         run: |
           name="${TAG%%-v*}"
           version="${TAG#*-v}"
-          case "$name" in browser|server) ;; *) echo "unknown package in tag $TAG"; exit 1 ;; esac
-          actual=$(node -p "require('./packages/$name/package.json').version")
-          if [ "$actual" != "$version" ]; then echo "tag says $version, packages/$name/package.json says $actual"; exit 1; fi
-          echo "dir=packages/$name" >> "$GITHUB_OUTPUT"
+          case "$name" in browser|server) dir="packages/$name" ;; parlox) dir="packages/wizard" ;; *) echo "unknown package in tag $TAG"; exit 1 ;; esac
+          actual=$(node -p "require('./$dir/package.json').version")
+          if [ "$actual" != "$version" ]; then echo "tag says $version, $dir/package.json says $actual"; exit 1; fi
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
@@ -76,7 +84,14 @@ jobs:
           name: package
           path: out
       - name: Publish the tested tarball
+        env:
+          NAME: ${{ needs.build.outputs.name }}
         run: |
           # "./" makes it a file path: without it npm reads "out/<file>" as GitHub shorthand (user/repo).
           sha256sum "./out/${{ needs.build.outputs.tarball }}"
-          npm publish "./out/${{ needs.build.outputs.tarball }}" --access public
+          if [ "$NAME" = "parlox" ]; then
+            npm stage publish "./out/${{ needs.build.outputs.tarball }}" --access public --provenance
+            echo "Staged. It goes live only when a maintainer approves it: npmjs.com → parlox → Staged Packages → Approve (2FA)."
+          else
+            npm publish "./out/${{ needs.build.outputs.tarball }}" --access public
+          fi

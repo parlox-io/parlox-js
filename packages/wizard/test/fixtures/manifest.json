@@ -1,0 +1,24 @@
+{
+  "generators": { "create-vite": "9.2.1", "express-generator": "4.16.1", "create-hono": "0.19.5" },
+  "fixtures": [
+    { "name": "vite-react-ts", "dir": "generated/vite-react-ts", "host": "other", "changes": ["public/.well-known/parlox-verify", "src/main.tsx"], "e2e": { "build": ["npm", "run", "build"], "dist": "dist", "verifyFile": "dist/.well-known/parlox-verify" } },
+    { "name": "vite-react-ts on Vercel", "dir": "generated/vite-react-ts", "host": "vercel", "changes": ["middleware.ts", "src/main.tsx"], "e2e": { "build": ["npm", "run", "build"], "dist": "dist", "typecheckFile": "middleware.ts" } },
+    { "name": "vite-react", "dir": "generated/vite-react", "host": "other", "changes": ["public/.well-known/parlox-verify", "src/main.jsx"], "e2e": { "build": ["npm", "run", "build"], "dist": "dist", "verifyFile": "dist/.well-known/parlox-verify" } },
+    { "name": "vite-react on Vercel", "dir": "generated/vite-react", "host": "vercel", "changes": ["middleware.js", "src/main.jsx"], "e2e": { "build": ["npm", "run", "build"], "dist": "dist" } },
+    { "name": "express-pug", "dir": "generated/express-pug", "host": "other", "changes": ["app.js", "views/layout.pug"], "e2e": { "serve": { "entry": "app.js", "pages": ["/"] } } },
+    { "name": "express-jade", "dir": "generated/express-jade", "host": "other", "changes": ["app.js", "views/layout.jade"], "e2e": { "serve": { "entry": "app.js", "pages": ["/"] } } },
+    { "name": "express-ejs", "dir": "generated/express-ejs", "host": "other", "changes": ["app.js", "views/index.ejs"], "e2e": { "serve": { "entry": "app.js", "pages": ["/"] } } },
+    { "name": "express-hbs", "dir": "generated/express-hbs", "host": "other", "changes": ["app.js", "views/layout.hbs"], "e2e": { "serve": { "entry": "app.js", "pages": ["/"] } } },
+    { "name": "express-static", "dir": "generated/express-static", "host": "other", "changes": ["app.js", "public/index.html"], "e2e": { "serve": { "entry": "app.js", "pages": ["/index.html"] } } },
+    { "name": "hono-nodejs", "dir": "generated/hono-nodejs", "host": "other", "changes": ["src/index.ts"], "e2e": { "typecheck": true } },
+    { "name": "hono-bun", "dir": "generated/hono-bun", "host": "other", "changes": [".env", "src/index.ts"], "e2e": { "typecheck": false, "why": "the template's tsconfig sets no target, so @types/bun's typed arrays do not type-check with tsc even before the wizard runs; Bun runs TypeScript itself" } },
+    { "name": "hono-cloudflare-workers", "dir": "generated/hono-cloudflare-workers", "host": "other", "changes": ["src/index.ts"], "e2e": { "typecheck": true } },
+    { "name": "hono-cloudflare-pages", "dir": "generated/hono-cloudflare-pages", "host": "other", "changes": ["src/index.tsx", "src/renderer.tsx"], "e2e": { "typecheck": true } },
+    { "name": "hono-vercel", "dir": "generated/hono-vercel", "host": "other", "changes": ["src/index.ts"], "e2e": { "typecheck": true } },
+    { "name": "hono-aws-lambda", "dir": "generated/hono-aws-lambda", "host": "other", "changes": ["src/index.ts"], "e2e": { "typecheck": true } },
+    { "name": "express ESM TypeScript factory", "dir": "hand/express-esm-ts-factory", "host": "other", "changes": [".env", "src/server.ts"], "e2e": { "typecheck": true } },
+    { "name": "Vite with an existing Vercel middleware", "dir": "hand/vite-vercel-middleware", "host": "vercel", "changes": ["middleware.ts", "src/main.tsx"], "e2e": { "build": ["npm", "run", "build"], "dist": "dist", "typecheckFile": "middleware.ts" } },
+    { "name": "Hono with an html template (a store's own layout function)", "dir": "hand/hono-html-template", "host": "other", "changes": ["src/html.ts", "src/index.ts"], "e2e": { "typecheck": true } },
+    { "name": "pnpm monorepo: web (Vite React) and api (Express)", "dir": "hand/monorepo", "host": "other", "changes": ["api/.env", "api/server.js", "web/public/.well-known/parlox-verify", "web/src/main.jsx"] }
+  ]
+}

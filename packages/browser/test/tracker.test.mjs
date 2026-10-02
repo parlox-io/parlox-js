@@ -81,9 +81,12 @@ test("no cookie is ever set, and typed values never leave the page", async () =>
   window.dispatchEvent(new Event("pagehide"));
   await tick();
   const all = JSON.stringify(beacons);
+  // Every field but the random ids: a random event or session id can contain "4242" by chance (one did, failing CI).
+  const typed = JSON.stringify(beacons, (k, v) => (k === "eid" || k === "sid" ? undefined : v));
   assert.equal(document.cookie, "");
   assert.ok(!all.includes("jane.doe"), "a typed email is never sent");
-  assert.ok(!all.includes("4242"), "a typed card number is never sent");
+  assert.ok(!all.includes("4242424242424242"), "a typed card number is never sent, anywhere");
+  assert.ok(!typed.includes("4242"), "no part of a typed card number is sent");
   assert.ok(!all.includes("1234 5678"), "digit runs in labels are masked");
   assert.ok(all.includes('"field_focus"') && all.includes('"email"'), "the field's name is recorded");
 });
