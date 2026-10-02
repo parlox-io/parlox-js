@@ -65,7 +65,7 @@
   "scripts": {
     "build": "node build.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node build.mjs && node --test \"test/*.test.mjs\"",
+    "test": "node build.mjs && node --test",
     "prepublishOnly": "node build.mjs && node --test \"test/*.test.mjs\""
   },
   "dependencies": {

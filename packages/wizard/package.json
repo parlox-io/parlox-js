@@ -1,0 +1,49 @@
+{
+  "name": "parlox",
+  "version": "1.1.0",
+  "description": "Install Parlox agent analytics into a Next.js, Vite React, Express or Hono project: npx parlox init. One command, a diff to confirm, and your secret key stays off your machine by default.",
+  "license": "MIT",
+  "homepage": "https://github.com/parlox-io/parlox-js/tree/main/packages/wizard#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/parlox-io/parlox-js.git",
+    "directory": "packages/wizard"
+  },
+  "bugs": {
+    "url": "https://github.com/parlox-io/parlox-js/issues"
+  },
+  "type": "module",
+  "bin": {
+    "parlox": "./dist/bin.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "npm-shrinkwrap.json"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node scripts/run-tests.mjs",
+    "shrinkwrap": "node scripts/shrinkwrap.mjs"
+  },
+  "dependencies": {
+    "@babel/parser": "7.29.9",
+    "@clack/prompts": "1.8.1",
+    "diff": "9.0.0",
+    "ink": "6.8.0",
+    "react": "19.3.0",
+    "recast": "0.24.0",
+    "yaml": "2.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.4",
+    "@types/react": "19.3.0",
+    "ink-testing-library": "4.0.0",
+    "typescript": "5.9.3"
+  }
+}
