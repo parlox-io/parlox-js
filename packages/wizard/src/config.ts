@@ -6,10 +6,10 @@ export interface WizardConfig { gateway: string; supabaseUrl: string; clientId: 
 export const PRODUCTION: WizardConfig = {
   gateway: "https://gateway.parlox.io",
   supabaseUrl: "https://oijlltuyaibjimksyeoh.supabase.co",
-  clientId: "REPLACE_WITH_OAUTH_CLIENT_ID",
+  clientId: "64699d97-1618-4291-bb19-82624285bbe0",
   // Supabase's public (publishable) key: not a secret, safe to ship, and required by Supabase's own API
   // gateway on every /auth/v1/* call (the token exchange and logout included).
-  apiKey: "REPLACE_WITH_SUPABASE_PUBLISHABLE_KEY",
+  apiKey: "sb_publishable_E97p_dRldy6mZpxqFWRwrg_cOx-1kks",
   ports: [53682, 53683, 53684, 53685],
   // The merchant dashboard, where the production key is created and shown once (the hand-off link opens it).
   dashboard: "https://app.parlox.io",
