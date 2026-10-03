@@ -1,5 +1,6 @@
 import { posix } from "node:path";
 import { declared, type FileChange, type Plan } from "../plan-core.js";
+import { packagesToAdd } from "../pins.js";
 import { VERCEL_FUNCTIONS_VERSION } from "../versions.js";
 import { hasDep } from "../workspace.js";
 import { addImportLine, applySplices, endsLine, identifierUse, parseCode, removeStatement, SpliceError, startsLine, styleOf, topLevelNames, walk, type Ast, type Node, type SpliceEdit } from "./splice.js";
@@ -326,7 +327,9 @@ export function planVercelEdge(read: (rel: string) => string | null, typescript:
     }
   }
   const have = declared(read);
-  if (have["@parlox/server"] !== serverVersion) out.packages.push(`@parlox/server@${serverVersion}`);
+  const pins = packagesToAdd(have, [["@parlox/server", serverVersion]]);
+  out.packages.push(...pins.add);
+  out.warnings.push(...pins.notes);
   if (!have["@vercel/functions"]) out.packages.push(`@vercel/functions@${VERCEL_FUNCTIONS_VERSION}`);
   return out;
 }

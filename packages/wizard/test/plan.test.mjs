@@ -12,7 +12,7 @@ const PK = "pk_" + "a1".repeat(12);
 const layout = `export default function RootLayout({ children }) {\n  return (\n    <html>\n      <body>{children}</body>\n    </html>\n  );\n}\n`;
 const git = (tracked = [], ignored = [".env.local"]) => ({ isRepo: () => true, dirty: () => [], isTracked: (f) => tracked.includes(f), isIgnored: (f) => ignored.includes(f) });
 const readerFor = (dir) => (rel) => readInside(dir, rel);
-const installed = (dir) => writeFileSync(join(dir, "package.json"), pkg({ next: "16.0.1", react: "19.0.0", "@parlox/browser": "1.0.3", "@parlox/server": "1.1.0" }));
+const installed = (dir) => writeFileSync(join(dir, "package.json"), pkg({ next: "16.0.1", react: "19.0.0", "@parlox/browser": "1.0.3", "@parlox/server": "1.2.0" }));
 
 test("fresh Next 16 app: layout edit, proxy.ts created, .env.local with the verify token only, exact installs", () => {
   const dir = fixture({ "package.json": pkg(), "package-lock.json": "{}", "tsconfig.json": "{}", "app/layout.tsx": layout });
@@ -20,7 +20,7 @@ test("fresh Next 16 app: layout edit, proxy.ts created, .env.local with the veri
   assert.deepEqual(plan.changes.map((c) => c.path).sort(), [".env.local", "app/layout.tsx", "proxy.ts"]);
   assert.equal(plan.changes.find((c) => c.path === ".env.local").after, "PARLOX_VERIFY_TOKEN=vt_abc\n");
   assert.equal(JSON.stringify(plan).includes("sk_"), false);
-  assert.deepEqual(plan.install, { command: "npm", args: ["install", "--save-exact", "@parlox/browser@1.0.3", "@parlox/server@1.1.0"] });
+  assert.deepEqual(plan.install, { command: "npm", args: ["install", "--save-exact", "@parlox/browser@1.0.3", "@parlox/server@1.2.0"] });
   assert.deepEqual(plan.manual, []);
 });
 

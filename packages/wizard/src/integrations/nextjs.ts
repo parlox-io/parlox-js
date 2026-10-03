@@ -5,6 +5,7 @@ import { addBrowser, removeBrowser } from "../edits/browser.js";
 import { addServer, removeServer } from "../edits/server.js";
 import { addGitignoreLine, setEnvValue } from "../edits/env.js";
 import { declared, packageCommand, type Plan } from "../plan-core.js";
+import { packagesToAdd } from "../pins.js";
 import { BROWSER_VERSION, SERVER_VERSION } from "../versions.js";
 import { DetectError, GUIDE, installedMajor, packageManagerOf, readJson, workspaceDirs, workspaceGlobs, type PackageManager } from "../workspace.js";
 import { ignoreRefusedReason, readEnvFile, readOrRefusal, refusedEnvReason, trackedEnvReason, unplanEnv } from "../envfiles.js";
@@ -72,7 +73,8 @@ const ENV_FILE = ".env.local";
 const VERIFY = "PARLOX_VERIFY_TOKEN";
 const PACKAGES = ["@parlox/browser", "@parlox/server"];
 
-export function installPlan(app: NextApp, input: { publicKey: string; verifyToken: string; shown?(rel: string): string }, read: (rel: string) => string | null, git: Git): Plan {
+/** `versions`: the versions to add (the ones this wizard pins when not given). */
+export function installPlan(app: NextApp, input: { publicKey: string; verifyToken: string; shown?(rel: string): string; versions?: { browser: string; server: string } }, read: (rel: string) => string | null, git: Git): Plan {
   const plan: Plan = { changes: [], install: null, manual: [], warnings: [] };
   const change = (path: string, after: string | null) => { const before = read(path); if (before !== after) plan.changes.push({ path, before, after }); };
 
@@ -104,9 +106,10 @@ export function installPlan(app: NextApp, input: { publicKey: string; verifyToke
     }
   }
 
-  const have = declared(read);
-  const want = [["@parlox/browser", BROWSER_VERSION], ["@parlox/server", SERVER_VERSION]].filter(([name, version]) => have[name] !== version).map(([name, version]) => `${name}@${version}`);
-  if (want.length) plan.install = packageCommand(app.packageManager, "add", want);
+  const versions = input.versions ?? { browser: BROWSER_VERSION, server: SERVER_VERSION };
+  const pins = packagesToAdd(declared(read), [["@parlox/browser", versions.browser], ["@parlox/server", versions.server]]);
+  if (pins.add.length) plan.install = packageCommand(app.packageManager, "add", pins.add);
+  plan.warnings.push(...pins.notes);
   return plan;
 }
 
