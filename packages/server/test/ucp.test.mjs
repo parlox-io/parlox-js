@@ -66,7 +66,7 @@ async function sent(report, context) {
 
 // ── The request ──
 
-test("ucp: one request of its own to /v1/s with the key: { events: [{ ucp: report, ...context }] }, resolving { ok, status }", async () => {
+test("ucp: one request of its own to /v1/s with the key: { events: [{ ucp: report, ...context }] }, resolving { ok, status }; a path in the context is not sent", async () => {
   const report = {
     op: "checkout_complete", http_status: 200, ms: 87, checkout_id: "chk_123", order_id: "ord_9", checkout_status: "completed",
     codes: [{ type: "warning", code: "final_sale", severity: "advisory", path: "$.line_items[1]" }],
@@ -84,7 +84,8 @@ test("ucp: one request of its own to /v1/s with the key: { events: [{ ucp: repor
   assert.equal(r.path, "/v1/s");
   assert.equal(r.auth, `Bearer ${SECRET}`);
   assert.equal(r.type, "application/json");
-  assert.deepEqual(r.body, { events: [{ ucp: report, ...context }] });
+  const { path, ...sentContext } = context;
+  assert.deepEqual(r.body, { events: [{ ucp: report, ...sentContext }] });
 });
 
 test("ucp: without a context only the report is sent, and the address only when the caller passes it", async () => {
@@ -188,9 +189,13 @@ const CONTEXT_CASES = {
     ["not-an-ip", undefined], ["01.2.3.4", undefined], ["256.1.1.1", undefined], ["fe80::1%eth0", undefined], ["203.0.113.9, 10.0.0.1", undefined], ["", undefined], [5, undefined]],
   ip_hash: [["a".repeat(64), "a".repeat(64)], ["0123456789abcdef", "0123456789abcdef"], ["abc", undefined], ["A".repeat(64), undefined], ["a".repeat(65), undefined]],
   sid: [["0123456789abcdef", "0123456789abcdef"], ["f".repeat(32), "f".repeat(32)], ["xyz", undefined], ["0".repeat(33), undefined], ["0123456789ABCDEF", undefined]],
-  path: [["/checkout-sessions/chk_1", "/checkout-sessions/chk_1"], ["/catalog/search?q=jane@example.com", "/catalog/search"], ["/p#frag", "/p"],
-    ["/" + "p".repeat(2500), "/" + "p".repeat(1999)], ["?q=1", undefined], ["", undefined], [5, undefined]],
 };
+
+test("ucp: the call's path is never sent (Parlox does not read it)", async () => {
+  for (const path of ["/checkout-sessions/chk_1", "/catalog/search?q=jane@example.com", "/p#frag", "/" + "p".repeat(2500), "", 5]) {
+    assert.deepEqual(await sent({ op: "catalog_search" }, { path, ua: "AgentPlatform/1.0" }), { ucp: { op: "catalog_search" }, ua: "AgentPlatform/1.0" }, JSON.stringify(path).slice(0, 60));
+  }
+});
 
 for (const [field, cases] of Object.entries(CONTEXT_CASES)) {
   test(`ucp bounds: context ${field}`, async () => {
@@ -250,6 +255,13 @@ test("ucp: emails and runs of 4 or more digits in the query are masked before it
     const { ucp } = await sent({ op: "catalog_search", query });
     assert.equal(ucp.query, expected, query.slice(0, 60));
   }
+});
+
+test("ucp: a number split by spaces or dashes is masked only in its runs of 4 or more digits; a message's path is sent as given", async () => {
+  const { ucp } = await sent({ op: "catalog_search", query: "call 555 123 4567 or 555-123-4567" });
+  assert.equal(ucp.query, "call 555 123 [number] or 555-123-[number]");
+  const { ucp: c } = await sent({ op: "checkout_update", codes: [{ code: "invalid", path: "jane@example.com 0123456789" }] });
+  assert.deepEqual(c.codes, [{ code: "invalid", path: "jane@example.com 0123456789" }], "the caller decides what goes there; it is not masked");
 });
 
 test("ucp: a very long query is read up to 1000 characters, and the word the cut falls in is dropped, so no part of an email or number goes out", async () => {

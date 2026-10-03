@@ -32,7 +32,9 @@ export interface UcpCode {
   code: string;
   /** Its severity, such as "recoverable" (lower-case letters and _; at most 30 characters kept). */
   severity?: string | null;
-  /** The JSONPath it points at, such as "$.line_items[0]" (at most 80 characters kept). */
+  /** The JSONPath it points at, such as "$.line_items[0]" (at most 80 characters kept). Free text that Parlox keeps as
+   * given, with nothing masked: what goes there is the caller's decision, and it is meant for the JSONPath, never for
+   * buyer data. */
   path?: string | null;
 }
 
@@ -85,8 +87,6 @@ export interface UcpContext {
   ip_hash?: string | null;
   /** The Parlox session id the buyer's browser sent back (sessionId() from @parlox/browser), for handoff_linked. */
   sid?: string | null;
-  /** The path of the UCP call. Anything from ? or # on is left out (at most 2000 characters kept). */
-  path?: string | null;
 }
 
 /** The message onError gets for a report whose op is not one Parlox records. */
@@ -156,9 +156,6 @@ const address = (v: unknown): string | undefined => {
   return ip.length <= 64 && IP.test(ip) ? ip : undefined;
 };
 
-// The path alone: a query string can hold what an agent searched for, unmasked.
-const pathOnly = (v: unknown): string | undefined => (typeof v === "string" ? text(v.split(/[?#]/, 1)[0], 2000) : undefined);
-
 /** Fields whose value is undefined are left out, so that nothing is sent for them. */
 function defined(fields: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
@@ -210,7 +207,6 @@ export function ucpEvent(report: UcpReport, context?: UcpContext | null): Record
       ip: address(c.ip),
       ip_hash: str(c.ip_hash, 64, /^[a-f0-9]{16,64}$/),
       sid: str(c.sid, 32, /^[a-f0-9]{16,32}$/),
-      path: pathOnly(c.path),
     }),
   };
 }

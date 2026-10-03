@@ -105,3 +105,12 @@ test("readme: UCP reports use the send key's own instance, show a report after a
   assert.match(text, /never batched/);
   assert.match(text, /At most 10 are posted at the same time in the whole process/);
 });
+
+test("readme: UCP reports' second argument has no path; a message's path is free text kept as passed; the query's masking is partial", () => {
+  const text = oneLine(section("UCP reports"));
+  const second = text.slice(text.indexOf("The second argument"));
+  assert.doesNotMatch(second.slice(0, second.indexOf(". ")), /`path`/, "the call's path is not sent");
+  assert.match(text, /A message's `path` is free text that Parlox keeps as you pass it, up to 80 characters, without masking anything in it\. What goes there is your decision: it is meant for the JSONPath the message points at \(such as `\$\.line_items\[0\]`\), never for buyer data\./);
+  assert.match(text, /a number split by spaces or other characters is masked only in its runs of 4 or more digits \(`555 123 4567` is sent as `555 123 \[number\]`\)/);
+  assert.match(text, /do not pass buyer data in the query/);
+});

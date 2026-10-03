@@ -6,7 +6,7 @@ const parlox = createParlox({ secretKey: "sk_example", maxUcpReportsInFlight: 5 
 const code: UcpCode = { type: "error", code: "out_of_stock", severity: "recoverable", path: "$.line_items[0]" };
 const op: UcpOp = "checkout_create";
 const report: UcpReport = { op, http_status: 201, ms: 40, checkout_id: "chk_1", checkout_status: "incomplete", codes: [code], total_cents: 4990, items: 1, item_ids: ["sku_1"], platform: "agent.example.com" };
-const context: UcpContext = { ua: "AgentPlatform/1.0", ip: "203.0.113.9", ip_hash: null, sid: null, path: "/checkout-sessions" };
+const context: UcpContext = { ua: "AgentPlatform/1.0", ip: "203.0.113.9", ip_hash: null, sid: null };
 const done: Promise<{ ok: boolean; status: number }> = parlox.ucp(report, context);
 const bare: Promise<{ ok: boolean; status: number }> = parloxFetch().ucp({ op: "discovery" });
 void done; void bare;
@@ -17,3 +17,5 @@ void parlox.ucp({ op: "checkout_finish" });
 void parlox.ucp({ http_status: 200 });
 // @ts-expect-error: checkout_status is one of UCP's checkout statuses
 void parlox.ucp({ op: "checkout_get", checkout_status: "done" });
+// @ts-expect-error: the call's path is not part of the context (Parlox does not read it)
+void parlox.ucp({ op: "discovery" }, { path: "/checkout-sessions" });
