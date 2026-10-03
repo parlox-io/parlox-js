@@ -118,6 +118,14 @@ test("each slide animates to its final picture, then stops redrawing", async () 
       for (let k = 0; k < i; k++) { const before = r.lastFrame(); r.stdin.write("\u001B[C"); await until(() => r.lastFrame() !== before, "the next slide"); }
       await until(() => r.lastFrame().includes(title), title);
       await until(() => reached(r.lastFrame()), `${title}: its final picture`);
+      // The phrase checked can show a step before the last frame (some steps draw the same picture), so wait for the
+      // redraws to stop (no commit for ten animation steps) before measuring that none follow.
+      for (const deadline = Date.now() + 10_000; ;) {
+        const before = commits;
+        await wait(50);
+        if (commits === before) break;
+        if (Date.now() > deadline) throw new Error(`${title}: the reveal never finished`);
+      }
       const settled = commits;
       // Absence of redraws can only be shown over time: forty animation steps.
       await wait(200);
