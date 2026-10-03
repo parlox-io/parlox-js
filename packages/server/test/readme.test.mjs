@@ -84,3 +84,24 @@ test("readme: cf-connecting-ip is the default only for requests Cloudflare's own
   assert.match(text, /On self-hosted workerd, set `ipHeader` \(or `PARLOX_IP_HEADER`\) to the header your proxy sets/);
   assert.doesNotMatch(text, /`cf-connecting-ip` on Cloudflare Workers automatically/);
 });
+
+test("readme: UCP reports use the send key's own instance, show a report after a UCP call, and say what is sent, what never is, and what a crawler-only key gets", () => {
+  const all = readme.split(/^## /m).map((s) => s.split("\n")[0]);
+  assert.equal(all[all.indexOf("Confirmed orders") + 1], "UCP reports", "beside Confirmed orders");
+  const ucp = section("UCP reports");
+  const code = [...ucp.matchAll(/```[a-z]*\n([\s\S]*?)```/g)].map((m) => m[1]).join("\n");
+  const made = code.match(/const (\w+) = createParlox\(\{ secretKey: process\.env\.PARLOX_ORDERS_KEY \}\);/);
+  assert.ok(made, code);
+  assert.match(code, new RegExp(`${made[1]}\\.ucp\\(\\s*\\{ op: "checkout_create"`));
+  assert.doesNotMatch(code, /createParlox\(\)/);
+  const text = oneLine(ucp);
+  const ops = ["discovery", "catalog_search", "catalog_lookup", "catalog_product", "checkout_create", "checkout_get", "checkout_update", "checkout_complete", "checkout_cancel", "order_get", "order_update", "handoff_opened", "handoff_linked", "handoff_completed"];
+  for (const op of ops) assert.ok(text.includes(`\`${op}\``), op);
+  assert.match(text, /Never sent: buyer names, emails, phone numbers, addresses, payment instruments or tokens/);
+  assert.match(text, /emails and runs of 4 or more digits in it are replaced with `\[email\]` and `\[number\]`/);
+  assert.match(text, /Pass `ip` only when the caller is an agent platform's server/);
+  assert.match(text, /HTTP 403/);
+  assert.match(text, /`Parlox refused the UCP report \(HTTP 403\): This key can only send crawler reports\. To record orders or UCP reports, create a send key in the dashboard \(Settings → Keys\)\.`/);
+  assert.match(text, /never batched/);
+  assert.match(text, /At most 10 are posted at the same time in the whole process/);
+});

@@ -8,10 +8,12 @@ import { mock } from "node:test";
 import assert from "node:assert/strict";
 
 const SAID_ONCE = String.raw` \(said once per instance; onError receives every refusal\)$`;
-/** The lines the SDK writes (core.ts: say): an empty secretKey, and a key Parlox refused, for an order or a report. */
+/** The lines the SDK writes (core.ts: say): an empty secretKey, and a key Parlox refused, for an order, a UCP report or
+ * a crawler report. */
 const KINDS = [
   ["an empty secretKey", /^@parlox\/server: secretKey was given but is empty: set PARLOX_ORDERS_KEY \(or the variable you pass\) — Parlox did not fall back to PARLOX_SECRET_KEY$/],
   ["a refused order", new RegExp(String.raw`^@parlox\/server: Parlox refused the order \(HTTP 40[13]\)(?:: [^\n]+)?${SAID_ONCE}`)],
+  ["a refused UCP report", new RegExp(String.raw`^@parlox\/server: Parlox refused the UCP report \(HTTP 40[13]\)(?:: [^\n]+)?${SAID_ONCE}`)],
   ["a refused report", new RegExp(String.raw`^@parlox\/server: Parlox refused a crawler report \(HTTP 40[13]\)(?:: [^\n]+)?${SAID_ONCE}`)],
 ];
 

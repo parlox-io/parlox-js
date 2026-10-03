@@ -1,6 +1,6 @@
 # @parlox/server
 
-Parlox agent analytics for the merchant's server. AI fetchers and crawlers (ChatGPT, Claude, Perplexity, Google's agents...) never run JavaScript, so only your server sees them. This package reports them to Parlox, and posts confirmed orders. [`@parlox/browser`](https://www.npmjs.com/package/@parlox/browser) is the browser part.
+Parlox agent analytics for the merchant's server. AI fetchers and crawlers (ChatGPT, Claude, Perplexity, Google's agents...) never run JavaScript, so only your server sees them. This package reports them to Parlox, and posts confirmed orders and the calls your UCP server answers. [`@parlox/browser`](https://www.npmjs.com/package/@parlox/browser) is the browser part.
 
 ```bash
 npm install @parlox/server
@@ -8,7 +8,7 @@ npm install @parlox/server
 
 The easiest install is the wizard, run in your project: `npx parlox init` (Next.js; Vite React, Express and Hono from parlox 1.1.0).
 
-Set `PARLOX_SECRET_KEY` in the environment: the wizard does, or create a key in the Parlox dashboard (Settings → Keys). Crawler reports need no more than "Crawler reports only" access; orders use a key of their own ([below](#confirmed-orders)). Optional: `PARLOX_VERIFY_TOKEN` (answers `GET /.well-known/parlox-verify` to prove you own the domain) and `PARLOX_IP_HEADER` (below).
+Set `PARLOX_SECRET_KEY` in the environment: the wizard does, or create a key in the Parlox dashboard (Settings → Keys). Crawler reports need no more than "Crawler reports only" access; orders and UCP reports use a key of their own ([below](#confirmed-orders)). Optional: `PARLOX_VERIFY_TOKEN` (answers `GET /.well-known/parlox-verify` to prove you own the domain) and `PARLOX_IP_HEADER` (below).
 
 ## Next.js
 
@@ -79,6 +79,33 @@ await orders.purchase({ sid, order_id: "1001", value_cents: 9980, currency: "USD
 
 Orders have an instance and a variable of their own because the key the wizard sets in `PARLOX_SECRET_KEY` can only send crawler reports: Parlox refuses an order sent with it (HTTP 403, and `onError` gets the reason). Create a send key in the dashboard under Settings → Keys, with access "Send: crawler reports and orders", and set it as `PARLOX_ORDERS_KEY` only on the server that posts orders (never under a `VITE_` or `NEXT_PUBLIC_` name), leaving `PARLOX_SECRET_KEY` as it is. A `secretKey` you pass is used alone: if `PARLOX_ORDERS_KEY` is not set, that instance sends nothing and says so once in the log, and never falls back to `PARLOX_SECRET_KEY`.
 
+## UCP reports
+
+If your store runs its own UCP server (the Universal Commerce Protocol, through which agent platforms search a catalog and check out), report each call it answers. An agent that shops through UCP never loads a page, so this report is the only place its visit exists. UCP reports need a send key, as orders do: create the instance with `PARLOX_ORDERS_KEY` ([above](#confirmed-orders)), never with the crawler-only `PARLOX_SECRET_KEY`. One instance can post both orders and UCP reports.
+
+```ts
+import { createParlox } from "@parlox/server";
+const parlox = createParlox({ secretKey: process.env.PARLOX_ORDERS_KEY });
+
+// After your UCP server has answered POST /checkout-sessions:
+await parlox.ucp(
+  { op: "checkout_create", http_status: 201, ms: Date.now() - started, checkout_id: checkout.id, checkout_status: checkout.status, total_cents: 12998, items: 2, platform: "agent.example.com" },
+  { ua: request.headers.get("user-agent") },
+);
+```
+
+Where the platform keeps work alive after the response, hand the promise to its `waitUntil` instead of awaiting it, so the agent's answer is not delayed.
+
+`op` is required, and is one of `discovery`, `catalog_search`, `catalog_lookup`, `catalog_product`, `checkout_create`, `checkout_get`, `checkout_update`, `checkout_complete`, `checkout_cancel`, `order_get`, `order_update`, `handoff_opened`, `handoff_linked` and `handoff_completed`: a report with any other op is not sent, and `onError` says so. The rest of the report is what your UCP server answered, each field optional: `http_status`, `ms`, `checkout_id`, `order_id`, `checkout_status`, `codes` (each message's `type`, `code`, `severity` and the JSONPath `path` it points at), `total_cents`, `items`, `item_ids`, `discount_codes`, `fulfillment` (the option selected), `query` and `results` (a catalog search and how many results it returned), and `platform` (the host name in the profile URL of the platform's `UCP-Agent` header). The second argument, also optional, is about the call: `ua` (the caller's User-Agent), `ip`, `ip_hash` (a one-way hash that groups one caller's catalog calls, which carry no checkout id), `sid` (the browser's `sessionId()`, for `handoff_linked`) and `path` (without its query string).
+
+- Each value is checked the way Parlox checks it before sending, and one Parlox would not keep is left out: whole numbers within Parlox's ranges (rounded and clamped), ids of letters, digits and `_ : / . -` (`checkout_id` at most 100 characters, `order_id` 64), discount codes in upper case, at most 10 message codes, 10 item ids and 5 discount codes. Fields `ucp()` does not know are not sent.
+- The search query is free text an agent typed, so emails and runs of 4 or more digits in it are replaced with `[email]` and `[number]` before it is sent, and it is cut to 200 characters. Nothing else in it is changed: a name typed into a search is sent as typed.
+- Pass `ip` only when the caller is an agent platform's server (every UCP call is): Parlox checks it against the vendor's published ranges and discards it. It is sent only when you pass it, and only when it is an IPv4 or IPv6 address.
+- Never sent: buyer names, emails, phone numbers, addresses, payment instruments or tokens. `ucp()` has no field for them.
+- Each report is posted in a request of its own, never batched, like an order, and the promise says whether Parlox accepted it (`{ ok, status }`); it never rejects. At most 10 are posted at the same time in the whole process (`maxUcpReportsInFlight`), apart from the orders' 10, so a burst of UCP calls never holds back an order; beyond that the call resolves `{ ok: false, status: 0 }` at once and `onError` says why.
+
+A "Crawler reports only" key (the one the wizard sets in `PARLOX_SECRET_KEY`) is refused for UCP reports: HTTP 403, and `onError` gets `Parlox refused the UCP report (HTTP 403): This key can only send crawler reports. To record orders or UCP reports, create a send key in the dashboard (Settings → Keys).` The log says it once per instance too.
+
 ## Shutdown (long-running servers)
 
 On a server that keeps running between requests (Express, or Hono on Node or Bun, on Fly.io, Render, Railway, Heroku, Cloud Run, Kubernetes or your own machine), reports wait in a queue and go in batches. When the platform stops the server (a deploy, a restart, scaling down), it sends the process a signal first. Send what is queued in your shutdown code:
@@ -103,7 +130,8 @@ A hard kill (SIGKILL, or the grace period running out) loses what is queued, and
 - Where the platform may stop or freeze your code soon after a response and no `waitUntil` is passed (AWS Lambda, Cloudflare Workers, Deno Deploy, Azure Functions, each recognised by a signal its own documentation defines), each report is sent at once, never queued. One can still be lost if the platform stops the code before it is sent. On AWS Lambda that is the usual case: the request to Parlox starts only after an asynchronous one-way hash, so after your handler has returned, and Lambda then freezes the instance. The report is usually delayed to the next invocation of the same warm instance, and lost when the instance is frozen and then recycled.
 - A batch is sent again only when Parlox provably stored none of it: it answered `429` (its rate limit refuses before anything is stored), or the connection never reached it (refused, or the name did not resolve). Then up to 3 more attempts, 3 seconds apart, or after Parlox's `Retry-After` (at most 60 seconds). Any other failure (a timeout, a `5xx`, a dropped connection, a rejected key) is not retried, because Parlox may have stored the batch and a retry could count its reports twice; its reports are counted as delivery not confirmed.
 - `purchase()` is never batched: each order is posted at once and the promise says whether Parlox accepted it. At most 10 are posted at the same time in the whole process (every instance together); beyond that the call resolves `{ ok: false, status: 0 }` at once (and `onError` says why), so your code can retry. Each instance compares the number in flight in the process with its own `maxPurchasesInFlight`: an instance given a higher limit can take that number past a lower one, and an instance with the lower limit then refuses until the number is back under its own. When Parlox refuses an order, the promise gives the status and `onError` gets Parlox's reason, for example `Parlox refused the order (HTTP 403): This key can only send crawler reports. …` (at most 300 characters, on one line, the key never included).
-- A key Parlox refuses (HTTP 401 or 403) is also said in your server's log (`console.warn`), with Parlox's reason, the key never included: once per instance for orders and once for crawler reports, never a line per request, so an app that passes no `onError` still sees it.
+- `ucp()` is posted the same way as `purchase()`, with slots of its own ([above](#ucp-reports)).
+- A key Parlox refuses (HTTP 401 or 403) is also said in your server's log (`console.warn`), with Parlox's reason, the key never included: once per instance for orders, once for UCP reports and once for crawler reports, never a line per request, so an app that passes no `onError` still sees it.
 - On Deno, environment variables are read only with `--allow-env` (for all of them, or naming each one), so a terminal never shows Deno's permission prompt for them: without it they count as unset, nothing is reported unless the key is passed as `secretKey`, and reports wait in the queue as on any long-running server.
 - No runtime dependencies. Node 20+, edge runtimes, Workers, Deno, Bun.
 
@@ -123,6 +151,7 @@ A hard kill (SIGKILL, or the grace period running out) loses what is queued, and
 | `retryCount` | `3`: further attempts for a batch Parlox provably did not store (`0` turns retries off) |
 | `retryDelayMs` | `3000`, when Parlox names no `Retry-After` (at most `60000`) |
 | `maxPurchasesInFlight` | `10`, for the whole process |
+| `maxUcpReportsInFlight` | `10`, for the whole process, apart from purchases |
 | `includeApi` | `false`: GET requests under `/api/` (monitors, cron jobs, internal fetches) are not reported |
 | `runWrapped(pathname)` | Next.js only: which requests the wrapped middleware runs for (default: every request the matcher sends; it is never skipped) |
 | `onError(err)` | ignored |
@@ -131,6 +160,7 @@ Install guide: https://gateway.parlox.io/install.md
 
 ## Changes
 
+- 1.2.0: `ucp()` posts the calls your own UCP server answers ([UCP reports](#ucp-reports)), with a send key, like orders: each report in a request of its own, never batched; each field checked the way Parlox keeps it before it is sent; emails and runs of 4 or more digits masked in the search query; at most 10 posted at the same time in the process (`maxUcpReportsInFlight`), apart from purchases. `parloxFetch()` returns it beside `purchase`. A key Parlox refuses for UCP reports is said once in the log, as for orders.
 - 1.1.0: `@parlox/server/hono` and `@parlox/server/vercel`. Long-running servers (Express, Hono on Node or Bun) now send reports in bounded batches, one request at a time; a batch is sent again only when Parlox provably stored none of it, and the reports dropped from a full queue or whose delivery was not confirmed are counted and sent with the next batch; `flush()` sends what is queued. Where the platform may stop the code soon after a response (AWS Lambda, Cloudflare Workers, Deno Deploy, Azure Functions), each report is sent at once (on AWS Lambda usually during the instance's next invocation); at most 64 are sent at once in the process, and those beyond it are counted. `purchase()` allows at most 10 at the same time in the process, and `onError` gets Parlox's reason when it refuses an order. On Deno the environment is read only with permission (no prompt), and the queue's timers do not keep the process alive there either. A `secretKey` option is now used alone, even when it is unset or empty (1.0 read `PARLOX_SECRET_KEY` instead); a key Parlox refuses is said once in the log; the Hono and fetch adapters read the client address from `cf-connecting-ip` by default for a request Cloudflare's own network delivered (it carries the `cf` object); a `timeoutMs` that is not a whole number from 1 is the default. Includes 1.0.1.
 - 1.0.1 (not published separately): `withParlox` accepts a middleware typed with Next.js's `NextRequest`.
   The type parameters of `withParlox` changed (the request type now comes first, then the event type, then the return type). Code that called `withParlox<R>()` with an explicit type argument should drop it; the types are inferred from the middleware passed in.

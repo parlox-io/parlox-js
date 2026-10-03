@@ -42,3 +42,12 @@ test("a line said twice by one instance, a line the SDK does not write, or a lin
   assert.equal(untracked.status, 1, untracked.out);
   assert.match(untracked.out, /a line no tracked instance said/);
 });
+
+test("a refused UCP report is one of the SDK's own lines, once per instance", () => {
+  const line = "@parlox/server: Parlox refused the UCP report (HTTP 403): This key can only send crawler reports. (said once per instance; onError receives every refusal)";
+  const r = run("ucp", `const ucpRefuser = tracked((options) => ({ refuse() { options.onError(new Error("refused")); console.warn(${JSON.stringify(line)}); } }));\ntest("one refusal each", () => { ucpRefuser({}).refuse(); ucpRefuser({}).refuse(); });`);
+  assert.equal(r.status, 0, r.out);
+  const twice = run("ucp-twice", `const ucpRefuser = tracked((options) => ({ refuse() { options.onError(new Error("refused")); console.warn(${JSON.stringify(line)}); } }));\ntest("one instance refuses twice", () => { const p = ucpRefuser({}); p.refuse(); p.refuse(); });`);
+  assert.equal(twice.status, 1, twice.out);
+  assert.match(twice.out, /said a refused UCP report more than once/);
+});
