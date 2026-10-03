@@ -127,7 +127,7 @@
   "devDependencies": {
     "esbuild": "^0.28.2",
     "hono": "4.13.11",
-    "typescript": "^5.7.0"
+    "typescript": "^7.0.2"
   },
   "engines": {
     "node": ">=20"
