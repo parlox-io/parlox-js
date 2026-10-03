@@ -1,7 +1,7 @@
 {
   "name": "@parlox/server",
-  "version": "1.1.0",
-  "description": "Parlox agent analytics for the merchant's server: report AI fetchers, crawlers and confirmed orders. Next.js, Express, Hono, Vercel, Workers.",
+  "version": "1.2.0",
+  "description": "Parlox agent analytics for the merchant's server: report AI fetchers, crawlers, confirmed orders and UCP calls. Next.js, Express, Hono, Vercel, Workers.",
   "license": "MIT",
   "homepage": "https://github.com/parlox-io/parlox-js/tree/main/packages/server#readme",
   "repository": {
@@ -17,6 +17,7 @@
     "ai-agents",
     "crawlers",
     "ecommerce",
+    "ucp",
     "nextjs",
     "express",
     "hono",

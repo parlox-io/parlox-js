@@ -17,6 +17,9 @@
 
 import { DeliveryQueue, flushAll, MAX_BATCH_BYTES, MAX_RETRY_WAIT_MS, MAX_TIMER_MS } from "./queue.js";
 import { env, receivedByCloudflare, stopsAfterResponse, vercelWaitUntil, type WaitUntil } from "./platform.js";
+import { ucpEvent, type UcpContext, type UcpReport } from "./ucp.js";
+
+export type { UcpCheckoutStatus, UcpCode, UcpContext, UcpOp, UcpReport } from "./ucp.js";
 
 export const DEFAULT_ENDPOINT = "https://gateway.parlox.io";
 export const VERIFY_PATH = "/.well-known/parlox-verify";
@@ -87,15 +90,22 @@ export interface ParloxServerOptions {
    * lower limit then refuses until the number is back under its own.
    */
   maxPurchasesInFlight?: number;
+  /**
+   * UCP reports posted at the same time in this process (every instance together), at most; beyond it ucp() resolves
+   * { ok: false, status: 0 } at once. Default 10. Apart from the purchases' limit, so a burst of UCP calls never holds
+   * back an order. Compared the same way as maxPurchasesInFlight.
+   */
+  maxUcpReportsInFlight?: number;
   /** The Parlox gateway. Only for testing against another deployment. */
   endpoint?: string;
   /** Report GET requests under /api/ too (off by default: monitors, cron jobs and internal fetches live there). */
   includeApi?: boolean;
   /**
-   * Called with any reporting failure (network, timeout, rejected key, a purchase refused at the cap). For an order
-   * Parlox refuses, the error says why: "Parlox refused the order (HTTP 403): <Parlox's reason>". Reports never throw.
-   * A key Parlox refuses (401 or 403) is also said in the log (console.warn), once per instance for orders and once for
-   * crawler reports, so an app that passes no onError sees it too.
+   * Called with any reporting failure (network, timeout, rejected key, a purchase or UCP report refused at the cap, a
+   * UCP report with an unknown op). For an order Parlox refuses, the error says why: "Parlox refused the order (HTTP
+   * 403): <Parlox's reason>", and for a UCP report "Parlox refused the UCP report (HTTP 403): <Parlox's reason>".
+   * Reports never throw. A key Parlox refuses (401 or 403) is also said in the log (console.warn), once per instance
+   * for orders, once for UCP reports and once for crawler reports, so an app that passes no onError sees it too.
    */
   onError?: (error: unknown) => void;
 }
@@ -145,6 +155,14 @@ export interface Parlox {
   /** Posts a confirmed order (the purchase of record). Resolves to whether Parlox accepted it, with the HTTP status;
    * never rejects. Needs a key with send access (a "Crawler reports only" key gets 403, and onError says so). */
   purchase(order: Order): Promise<{ ok: boolean; status: number }>;
+  /**
+   * Posts what your UCP server answered one call (report) and, optionally, who made it (context), in a request of its
+   * own: never batched, never dropped silently. Each field is bounded the way Parlox keeps it, and the search query has
+   * its emails and runs of 4 or more digits masked. Resolves to whether Parlox accepted it, with the HTTP status; never
+   * rejects. An op Parlox does not record sends nothing and is told to onError. Needs a key with send access, like
+   * purchase() (a "Crawler reports only" key gets 403, and onError says so).
+   */
+  ucp(report: UcpReport, context?: UcpContext): Promise<{ ok: boolean; status: number }>;
   /** The header named for the client address (the ipHeader option, PARLOX_IP_HEADER, or Vercel's x-real-ip), if any
    * (for adapters). Cloudflare's cf-connecting-ip is not in it: that one depends on the request (ipHeaderFor). */
   readonly ipHeader: string | null;
@@ -255,9 +273,10 @@ async function readAtMost(res: Response, maxBytes: number): Promise<string | und
 const MAX_REPORTS_IN_FLIGHT = 64;
 
 // Requests in flight, counted for the whole process: shared by every instance, and by every copy of this package loaded
-// in it (the ES module and CommonJS builds), like the delivery queues' registry. Purchases and reports sent at once
-// have a count each.
+// in it (the ES module and CommonJS builds), like the delivery queues' registry. Purchases, UCP reports and reports
+// sent at once have a count each.
 const PURCHASES = Symbol.for("@parlox/server/purchases-in-flight");
+const UCP_REPORTS = Symbol.for("@parlox/server/ucp-reports-in-flight");
 const REPORTS = Symbol.for("@parlox/server/reports-in-flight");
 function inFlight(key: symbol): { count: number } {
   const g = globalThis as unknown as Record<symbol, { count: number } | undefined>;
@@ -275,6 +294,14 @@ function neverReached(err: unknown): boolean {
   return failures.every((e) => NEVER_REACHED.has(String((e as { code?: unknown } | null | undefined)?.code)));
 }
 
+// What is posted in a request of its own: orders (purchase()) and UCP reports (ucp()), each with its own slots in the
+// process, its words for a refusal, and its message at the cap.
+type Alone = "order" | "ucp";
+const ALONE: Record<Alone, { slots: symbol; what: string; busy: (max: number) => string }> = {
+  order: { slots: PURCHASES, what: "the order", busy: (max) => `purchase: ${max} purchases are already being posted; this one was not sent (retry it)` },
+  ucp: { slots: UCP_REPORTS, what: "the UCP report", busy: (max) => `ucp: ${max} UCP reports are already being sent; this one was not sent (retry it)` },
+};
+
 export function createParlox(options: ParloxServerOptions = {}): Parlox {
   // A secretKey option is used alone, whatever its value: the instance that posts orders, given its own variable,
   // must never send with PARLOX_SECRET_KEY (the middleware's crawler-reports-only key) when that variable is unset.
@@ -286,22 +313,23 @@ export function createParlox(options: ParloxServerOptions = {}): Parlox {
   const ipHeader = namedIpHeader(options.ipHeader) ?? null;
   const timeoutMs = bound(options.timeoutMs, 2000, MAX_TIMER_MS);
   const batchTimeoutMs = bound(options.batchTimeoutMs, 10_000, MAX_TIMER_MS);
-  const maxPurchases = bound(options.maxPurchasesInFlight, 10);
+  // At most this many of each kind posted in a request of its own (sendAlone) at the same time in the process.
+  const maxAlone: Record<Alone, number> = { order: bound(options.maxPurchasesInFlight, 10), ucp: bound(options.maxUcpReportsInFlight, 10) };
   const endpoint = (options.endpoint ?? DEFAULT_ENDPOINT).replace(/\/+$/, "");
   // The app's onError is told of every failure; if it throws, that must not break the site either.
   const onError = (error: unknown) => { try { options.onError?.(error); } catch { /* ignored */ } };
   const includeApi = options.includeApi === true;
   let warned = false;
-  // Whether a refusal of the key (401 or 403) has been said in the log yet, for orders and for crawler reports.
-  const refusalSaid = { order: false, report: false };
+  // Whether a refusal of the key (401 or 403) has been said in the log yet, for orders, UCP reports and crawler reports.
+  const refusalSaid = { order: false, ucp: false, report: false };
   // Whether the platform may stop the code soon after a response: read once, on the first report (it does not change
   // while the process runs).
   let stops: boolean | undefined;
 
-  // Posts one request body ({"events":[...]}, written as JSON by the caller). For an order Parlox refuses, onError gets
-  // the gateway's reason; reports, sent in far greater numbers, keep the status alone (only the first refusal of the
-  // key is read, for its line in the log).
-  async function send(body: string, timeout: number, kind: "report" | "order" = "report"): Promise<{ ok: boolean; status: number; retryable: boolean; retryAfterMs?: number }> {
+  // Posts one request body ({"events":[...]}, written as JSON by the caller). For an order or a UCP report Parlox
+  // refuses, onError gets the gateway's reason; crawler reports, sent in far greater numbers, keep the status alone
+  // (only the first refusal of the key is read, for its line in the log).
+  async function send(body: string, timeout: number, kind: "report" | Alone = "report"): Promise<{ ok: boolean; status: number; retryable: boolean; retryAfterMs?: number }> {
     if (!secretKey) {
       if (!warned) { warned = true; onError(new Error(explicitKey ? EMPTY_KEY : NO_KEY)); }
       return { ok: false, status: 0, retryable: false };
@@ -317,10 +345,11 @@ export function createParlox(options: ParloxServerOptions = {}): Parlox {
       // first refusal of each kind is said in the log too, with Parlox's reason: an app that passes no onError would
       // otherwise never see it. Once per instance, never a line per request.
       const keyRefused = res.status === 401 || res.status === 403;
-      if (!res.ok && kind === "order") {
+      if (!res.ok && kind !== "report") {
         const reason = await refusalReason(res, secretKey).catch(() => undefined);
-        onError(new Error(reason ? `Parlox refused the order (HTTP ${res.status}): ${reason}` : `Parlox answered HTTP ${res.status}`));
-        if (keyRefused && !refusalSaid.order) { refusalSaid.order = true; say(`Parlox refused the order (HTTP ${res.status})${reason ? `: ${reason}` : ""}${SAID_ONCE}`); }
+        const what = ALONE[kind].what;
+        onError(new Error(reason ? `Parlox refused ${what} (HTTP ${res.status}): ${reason}` : `Parlox answered HTTP ${res.status}`));
+        if (keyRefused && !refusalSaid[kind]) { refusalSaid[kind] = true; say(`Parlox refused ${what} (HTTP ${res.status})${reason ? `: ${reason}` : ""}${SAID_ONCE}`); }
       } else if (keyRefused && !refusalSaid.report) {
         // Read for this one line only; onError keeps the short message for reports.
         refusalSaid.report = true;
@@ -448,22 +477,19 @@ export function createParlox(options: ParloxServerOptions = {}): Parlox {
     return verifyToken && req.path === VERIFY_PATH && (req.method === "GET" || req.method === "HEAD") ? verifyToken : null;
   }
 
-  async function purchase(order: Order): Promise<{ ok: boolean; status: number }> {
+  // Posts one event in a request of its own (an order or a UCP report): never batched, and never dropped silently. At
+  // the cap the caller is told at once, so it can retry. Never rejects.
+  async function sendAlone(kind: Alone, event: () => Record<string, unknown>): Promise<{ ok: boolean; status: number }> {
     try {
-      if (!order || typeof order.order_id !== "string" || !order.order_id) throw new Error("purchase: order_id is required");
-      if (!Number.isInteger(order.value_cents) || order.value_cents < 0) throw new Error("purchase: value_cents must be a whole number of cents");
-      if (typeof order.currency !== "string" || !/^[A-Z]{3}$/.test(order.currency)) throw new Error("purchase: currency must be a 3-letter ISO code such as USD");
-      // Never batched and never dropped silently: at the cap the caller is told at once, so it can retry.
-      const purchases = inFlight(PURCHASES);
-      if (purchases.count >= maxPurchases) throw new Error(`purchase: ${maxPurchases} purchases are already being posted; this one was not sent (retry it)`);
-      const sid = typeof order.sid === "string" && /^[a-f0-9]{16,32}$/.test(order.sid) ? order.sid : undefined;
-      const event = { event: "purchase", sid, order_id: order.order_id.slice(0, 64), value_cents: order.value_cents, currency: order.currency, items: Number.isInteger(order.items) ? order.items : undefined };
-      purchases.count++;
+      const body = JSON.stringify({ events: [event()] });
+      const slots = inFlight(ALONE[kind].slots);
+      if (slots.count >= maxAlone[kind]) throw new Error(ALONE[kind].busy(maxAlone[kind]));
+      slots.count++;
       try {
-        const { ok, status } = await send(JSON.stringify({ events: [event] }), timeoutMs, "order");
+        const { ok, status } = await send(body, timeoutMs, kind);
         return { ok, status };
       } finally {
-        purchases.count--;
+        slots.count--;
       }
     } catch (err) {
       onError(err);
@@ -471,8 +497,22 @@ export function createParlox(options: ParloxServerOptions = {}): Parlox {
     }
   }
 
+  function purchase(order: Order): Promise<{ ok: boolean; status: number }> {
+    return sendAlone("order", () => {
+      if (!order || typeof order.order_id !== "string" || !order.order_id) throw new Error("purchase: order_id is required");
+      if (!Number.isInteger(order.value_cents) || order.value_cents < 0) throw new Error("purchase: value_cents must be a whole number of cents");
+      if (typeof order.currency !== "string" || !/^[A-Z]{3}$/.test(order.currency)) throw new Error("purchase: currency must be a 3-letter ISO code such as USD");
+      const sid = typeof order.sid === "string" && /^[a-f0-9]{16,32}$/.test(order.sid) ? order.sid : undefined;
+      return { event: "purchase", sid, order_id: order.order_id.slice(0, 64), value_cents: order.value_cents, currency: order.currency, items: Number.isInteger(order.items) ? order.items : undefined };
+    });
+  }
+
+  function ucp(report: UcpReport, context?: UcpContext): Promise<{ ok: boolean; status: number }> {
+    return sendAlone("ucp", () => ucpEvent(report, context));
+  }
+
   return {
-    shouldReport, report, enqueue, deliver, verifyAnswer, purchase, ipHeader,
+    shouldReport, report, enqueue, deliver, verifyAnswer, purchase, ucp, ipHeader,
     flush: (timeoutMs?: number) => queue.flush(timeoutMs),
     get pending() { return queue.pending; },
     get dropped() { return queue.dropped; },

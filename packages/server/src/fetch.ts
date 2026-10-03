@@ -49,6 +49,7 @@ export function parloxFetch(options: FetchOptions = {}) {
       } catch { /* Parlox must never break the site */ }
     },
     purchase: p.purchase,
+    ucp: p.ucp,
     flush,
   };
 }
