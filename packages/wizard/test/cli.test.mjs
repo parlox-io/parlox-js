@@ -71,7 +71,7 @@ test("full install on a clean repo: files written, packages installed exactly, n
   assert.match(read(dir, "app/layout.tsx"), /<ParloxAnalytics publicKey="pk_a1/);
   assert.match(read(dir, "proxy.ts"), /withParlox\(\)/);
   assert.equal(read(dir, ".env.local"), "PARLOX_VERIFY_TOKEN=vt_fake\n");
-  assert.deepEqual(runs.map((r) => [r.cmd, ...r.args]), [["npm", "install", "--save-exact", "@parlox/browser@1.0.3", "@parlox/server@1.1.0"]]);
+  assert.deepEqual(runs.map((r) => [r.cmd, ...r.args]), [["npm", "install", "--save-exact", "@parlox/browser@1.0.3", "@parlox/server@1.2.0"]]);
   assert.equal(allFiles(dir).some((f) => (read(dir, f) ?? "").includes("sk_")), false, "no secret key written");
   assert.equal(gw.calls.some((c) => c.path.endsWith("/keys")), false, "no key created without Vercel");
   assert.deepEqual(auth.logouts, ["Bearer wizard-token"]);
@@ -150,7 +150,7 @@ test("second run on an installed project: nothing to change, no install, exit 0"
   gitInit(dir);
   assert.equal(await main(["--yes", "--no-vercel", ...BASE], deps(dir, { ui: ui().ui })), 0);
   const p = JSON.parse(read(dir, "package.json"));
-  p.dependencies["@parlox/browser"] = "1.0.3"; p.dependencies["@parlox/server"] = "1.1.0";
+  p.dependencies["@parlox/browser"] = "1.0.3"; p.dependencies["@parlox/server"] = "1.2.0";
   execFileSync("node", ["-e", `require("fs").writeFileSync("package.json", ${JSON.stringify(JSON.stringify(p))})`], { cwd: dir });
   commitAll(dir, "installed");
   runs.length = 0;
@@ -364,7 +364,7 @@ test("step lifecycle: every step that ever goes active ends done, failed or skip
   gitInit(dirC);
   assert.equal(await main(["--yes", "--no-vercel", ...BASE], deps(dirC, { ui: stepTracker().ui })), 0);
   const p = JSON.parse(read(dirC, "package.json"));
-  p.dependencies["@parlox/browser"] = "1.0.3"; p.dependencies["@parlox/server"] = "1.1.0";
+  p.dependencies["@parlox/browser"] = "1.0.3"; p.dependencies["@parlox/server"] = "1.2.0";
   execFileSync("node", ["-e", `require("fs").writeFileSync("package.json", ${JSON.stringify(JSON.stringify(p))})`], { cwd: dirC });
   commitAll(dirC, "installed");
   const c = stepTracker();
@@ -447,7 +447,7 @@ test("an interrupted package install: exit 130, the install step fails as 'Inter
   assert.deepEqual(tasks.at(-1), ["install", "failed", "Interrupted"]);
   assert.equal(tr.steps.filter(([id]) => id === "install").at(-1)?.[1], "failed");
   assert.equal(tr.steps.some(([id]) => id === "host" || id === "check"), false, "nothing runs after the interrupted install");
-  assert.ok(tr.out.includes("WARN The package install was interrupted. Your files were changed; finish it with: npm install --save-exact @parlox/browser@1.0.3 @parlox/server@1.1.0"), JSON.stringify(tr.out));
+  assert.ok(tr.out.includes("WARN The package install was interrupted. Your files were changed; finish it with: npm install --save-exact @parlox/browser@1.0.3 @parlox/server@1.2.0"), JSON.stringify(tr.out));
   assertStepsResolved(tr.steps, "interrupted install");
   assert.deepEqual(auth.logouts, ["Bearer wizard-token"], "the sign-in session is still ended");
 });
@@ -458,7 +458,7 @@ test("an interrupted package removal: exit 130, the install step fails as 'Inter
   gitInit(dir);
   assert.equal(await main(["--yes", "--no-vercel", ...BASE], deps(dir, { ui: ui().ui })), 0);
   const p = JSON.parse(read(dir, "package.json"));
-  p.dependencies["@parlox/browser"] = "1.0.3"; p.dependencies["@parlox/server"] = "1.1.0";
+  p.dependencies["@parlox/browser"] = "1.0.3"; p.dependencies["@parlox/server"] = "1.2.0";
   execFileSync("node", ["-e", `require("fs").writeFileSync("package.json", ${JSON.stringify(JSON.stringify(p))})`], { cwd: dir });
   commitAll(dir, "installed");
   const ac = new AbortController();
@@ -477,7 +477,7 @@ test("an interrupted package removal: exit 130, the install step fails as 'Inter
 test("a package install stopped by the time limit, or a package manager that cannot start: exit 1, the step fails, the command to finish it is shown", async (t) => {
   const { deps } = await env(t);
   const cases = [
-    [{ status: null, stdout: "", stderr: "", timedOut: true }, "WARN The package install stopped after 10 minutes. Finish it with: npm install --save-exact @parlox/browser@1.0.3 @parlox/server@1.1.0"],
+    [{ status: null, stdout: "", stderr: "", timedOut: true }, "WARN The package install stopped after 10 minutes. Finish it with: npm install --save-exact @parlox/browser@1.0.3 @parlox/server@1.2.0"],
     [{ status: null, stdout: "", stderr: "", error: "ENOENT" }, "WARN Could not start npm: it was not found on this computer's PATH."],
   ];
   for (const [result, expected] of cases) {
@@ -499,7 +499,7 @@ test("a package removal stopped by the time limit, or a package manager that can
     gitInit(dir);
     assert.equal(await main(["--yes", "--no-vercel", ...BASE], deps(dir, { ui: ui().ui })), 0);
     const p = JSON.parse(read(dir, "package.json"));
-    p.dependencies["@parlox/browser"] = "1.0.3"; p.dependencies["@parlox/server"] = "1.1.0";
+    p.dependencies["@parlox/browser"] = "1.0.3"; p.dependencies["@parlox/server"] = "1.2.0";
     execFileSync("node", ["-e", `require("fs").writeFileSync("package.json", ${JSON.stringify(JSON.stringify(p))})`], { cwd: dir });
     commitAll(dir, "installed");
     const tr = stepTracker();
@@ -589,8 +589,8 @@ const noHandoffBrowser = (opened) => (url) => { opened.push(url); if (!url.inclu
 test("a failed or interrupted install started from the workspace root names the app folder to run the command in", async (t) => {
   const { deps } = await env(t);
   const cases = [
-    [{ status: 1, stdout: "", stderr: "" }, 1, "WARN The package manager reported an error. Run it yourself in apps/web: npm install --save-exact @parlox/browser@1.0.3 @parlox/server@1.1.0"],
-    [{ status: null, stdout: "", stderr: "", timedOut: true }, 1, "WARN The package install stopped after 10 minutes. Finish it in apps/web with: npm install --save-exact @parlox/browser@1.0.3 @parlox/server@1.1.0"],
+    [{ status: 1, stdout: "", stderr: "" }, 1, "WARN The package manager reported an error. Run it yourself in apps/web: npm install --save-exact @parlox/browser@1.0.3 @parlox/server@1.2.0"],
+    [{ status: null, stdout: "", stderr: "", timedOut: true }, 1, "WARN The package install stopped after 10 minutes. Finish it in apps/web with: npm install --save-exact @parlox/browser@1.0.3 @parlox/server@1.2.0"],
   ];
   for (const [result, code, expected] of cases) {
     const root = fixture({ "package.json": JSON.stringify({ name: "m", private: true, workspaces: ["apps/*"] }), "package-lock.json": "{}", ".gitignore": ".env*.local\n", "apps/web/package.json": pkg(), "apps/web/app/layout.tsx": layout });
@@ -650,7 +650,7 @@ test("uninstall leaves a --local-key PARLOX_SECRET_KEY line in .env.local (it co
   assert.equal(await main(["--yes", "--local-key", ...BASE], deps(dir, { ui: ui().ui })), 0);
   assert.match(read(dir, ".env.local"), /PARLOX_SECRET_KEY=sk_parlox_/);
   const p = JSON.parse(read(dir, "package.json"));
-  p.dependencies["@parlox/browser"] = "1.0.3"; p.dependencies["@parlox/server"] = "1.1.0";
+  p.dependencies["@parlox/browser"] = "1.0.3"; p.dependencies["@parlox/server"] = "1.2.0";
   execFileSync("node", ["-e", `require("fs").writeFileSync("package.json", ${JSON.stringify(JSON.stringify(p))})`], { cwd: dir });
   commitAll(dir, "installed");
   const u = ui();

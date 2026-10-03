@@ -10,6 +10,7 @@ import { edgeRefusal, planVercelEdge, unplanVercelEdge, vercelMiddlewareTemplate
 import { PathError } from "../fs-safe.js";
 import { detectHost, type Host } from "../hosts.js";
 import { declared, emptyPlan, packageCommand, type FileChange, type Plan } from "../plan-core.js";
+import { packagesToAdd } from "../pins.js";
 import { serverPackageKept } from "../sdk-use.js";
 import { DetectError, GUIDE, hasDep, packageManagerOf, readJson, readText } from "../workspace.js";
 import type { Detection, Integration, PlanInput } from "./types.js";
@@ -208,7 +209,9 @@ export const viteReact: Integration = {
         if (!e.ok) plan.manual.push({ file: data.entry, reason: e.reason, snippet: e.snippet, part: "browser" });
         else if (e.changed) plan.changes.push({ path: data.entry, before: got.text, after: e.code, purpose: "browser part" });
       }
-      if (have["@parlox/browser"] !== input.versions.browser) packages.push(`@parlox/browser@${input.versions.browser}`);
+      const pins = packagesToAdd(have, [["@parlox/browser", input.versions.browser]]);
+      packages.push(...pins.add);
+      plan.warnings.push(...pins.notes);
     }
     if (input.parts.server) {
       plan.warnings.push(...noEdgeNotes(data, input.host));

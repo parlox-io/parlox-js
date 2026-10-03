@@ -1,6 +1,6 @@
 {
   "name": "parlox",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Install Parlox agent analytics into a Next.js, Vite React, Express or Hono project: npx parlox init. One command, a diff to confirm, and your secret key stays off your machine by default.",
   "license": "MIT",
   "homepage": "https://github.com/parlox-io/parlox-js/tree/main/packages/wizard#readme",

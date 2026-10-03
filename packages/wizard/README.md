@@ -75,8 +75,10 @@ or `--plain`. `NO_COLOR` (set to anything) turns off colour in both.
 3. **Asks which site** this project is (or creates one). With `--site <domain>` it picks that site without asking.
 4. **Plans the change and shows you the diff** before touching anything, and the commands it would run.
 5. **Applies it**, once you agree (or at once under `--yes`), and runs your package manager to add the Parlox
-   packages at exact, tested versions (`@parlox/browser@1.0.3`, `@parlox/server@1.1.0`; for Vite on Vercel also
-   Vercel's own `@vercel/functions`, if the project does not have it).
+   packages at exact, tested versions (`@parlox/browser@1.0.3`, `@parlox/server@1.2.0`; for Vite on Vercel also
+   Vercel's own `@vercel/functions`, if the project does not have it). It never replaces a newer Parlox package that
+   is already installed (one your `package.json` lists at a later version or another major, or in a form it cannot
+   compare, such as a workspace link), and the review says so.
 6. **Connects your host**, per app with a server part: on a linked Vercel project (and you're signed in to the Vercel
    CLI) it asks, then creates a key that can only send crawler reports and sets `PARLOX_SECRET_KEY` and
    `PARLOX_VERIFY_TOKEN` through `vercel env add` on standard input. It checks the key's access in the gateway's

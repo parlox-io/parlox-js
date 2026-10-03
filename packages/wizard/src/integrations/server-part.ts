@@ -3,6 +3,7 @@ import { PathError } from "../fs-safe.js";
 import type { Host, HostId } from "../hosts.js";
 import { ownReportWarning, type OwnReport } from "../own-reporting.js";
 import { declared, packageCommand, type Plan } from "../plan-core.js";
+import { packagesToAdd } from "../pins.js";
 import type { PackageManager } from "../workspace.js";
 import type { PlanInput } from "./types.js";
 
@@ -66,5 +67,8 @@ export function planUseLine(pm: PackageManager, part: UseLinePart, input: PlanIn
     if (!e.ok) plan.manual.push({ file, reason: e.reason, snippet: e.snippet, part: "server" });
     else if (e.changed) plan.changes.push({ path: file, before: got.text, after: e.code, purpose: "server part" });
   }
-  if (declared(input.read)["@parlox/server"] !== input.versions.server) plan.install = packageCommand(pm, "add", [`@parlox/server@${input.versions.server}`]);
+  // The package at the tested version, unless package.json already has a newer one, or one the wizard cannot compare.
+  const pins = packagesToAdd(declared(input.read), [["@parlox/server", input.versions.server]]);
+  if (pins.add.length) plan.install = packageCommand(pm, "add", pins.add);
+  plan.warnings.push(...pins.notes);
 }

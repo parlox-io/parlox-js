@@ -1,7 +1,8 @@
 // The SDK versions this wizard release was tested with. Installed exactly (no ^), so a later SDK release never
-// arrives in a merchant's app through the wizard without a new, tested wizard release.
+// arrives in a merchant's app through the wizard without a new, tested wizard release. A later version the app's
+// package.json already declares is kept, never replaced by these (pins.ts).
 export const BROWSER_VERSION = "1.0.3";
-export const SERVER_VERSION = "1.1.0";
+export const SERVER_VERSION = "1.2.0";
 // Vercel's own package, for `next()` in the Routing Middleware the wizard writes for static sites on Vercel. Added only
 // when the project does not already have it (then its own version is kept), and never removed by uninstall (the
 // project may use it for more). 3.9.9 is the version the wizard was tested with.

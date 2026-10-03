@@ -40,7 +40,7 @@ const sri = `sha384-${createHash("sha384").update(served).digest("base64")}`;
 if (sri !== TAG_INTEGRITY) throw new Error(`TAG_INTEGRITY in versions.ts is ${TAG_INTEGRITY}; ${TAG_URL} hashes to ${sri}`);
 console.log(`ok  the pinned tag matches ${TAG_URL}`);
 
-// 2. The SDKs of this commit, packed the way npm publishes them (1.1.0 is not on npm while this is being built).
+// 2. The SDKs of this commit, packed the way npm publishes them (@parlox/server 1.2.0 is not on npm while this is being built).
 const packs = mkdtempSync(join(tmpdir(), "parlox-e2e-packs-"));
 const packOf = (ws) => join(packs, JSON.parse(sh(npm, ["pack", "--json", "--pack-destination", packs, "--workspace", ws], repo))[0].filename);
 const tarballs = { "@parlox/server": packOf("packages/server"), "@parlox/browser": packOf("packages/browser") };
