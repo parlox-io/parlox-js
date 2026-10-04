@@ -6,6 +6,8 @@ Parlox agent analytics for storefronts: which AI agents visit, what they read, w
 npm install @parlox/browser
 ```
 
+The easiest install is the wizard, run in your project: `npx parlox init` (Next.js, Vite React, Express and Hono). It adds the browser part (this package, or for Express and Hono the hosted tag built from it) and `@parlox/server`, showing every change first.
+
 ## React and Next.js
 
 Render once, in the root layout (App Router or Pages Router). It renders nothing and starts after hydration.
