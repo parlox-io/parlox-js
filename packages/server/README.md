@@ -6,7 +6,7 @@ Parlox agent analytics for the merchant's server. AI fetchers and crawlers (Chat
 npm install @parlox/server
 ```
 
-The easiest install is the wizard, run in your project: `npx parlox init` (Next.js; Vite React, Express and Hono from parlox 1.1.0).
+The easiest install is the wizard, run in your project: `npx parlox init` (Next.js, Vite React, Express and Hono).
 
 Set `PARLOX_SECRET_KEY` in the environment: the wizard does, or create a key in the Parlox dashboard (Settings → Keys). Crawler reports need no more than "Crawler reports only" access; orders and UCP reports use a key of their own ([below](#confirmed-orders)). Optional: `PARLOX_VERIFY_TOKEN` (answers `GET /.well-known/parlox-verify` to prove you own the domain) and `PARLOX_IP_HEADER` (below).
 

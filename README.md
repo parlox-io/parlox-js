@@ -1,9 +1,12 @@
 # Parlox SDKs
 
-Parlox shows merchants which AI agents visit their store, what they read, where they get stuck and whether they buy. This repository holds the two packages merchants install. They are built, tested and published from here, and every published version carries an npm provenance attestation that links it to the commit and workflow run that produced it.
+Parlox shows merchants which AI agents visit their store, what they read, where they get stuck and whether they buy. This repository holds what merchants install: the two SDK packages and the install wizard that adds them. They are built, tested and published from here, and every published version carries an npm provenance attestation that links it to the commit and workflow run that produced it.
+
+**Fastest install:** run `npx parlox init` in your project. The wizard covers Next.js, Vite React, Express and Hono, and a repo with a frontend and a backend; it shows every change as a diff before it writes anything ([`packages/wizard`](packages/wizard)). For any other stack, the install guide is at https://gateway.parlox.io/install.md.
 
 | Package | Runs | Install |
 |---|---|---|
+| [`parlox`](packages/wizard) | On the developer's machine, once: signs in, picks the site, adds the browser part and the server part to each app with one confirmation, and connects the host | `npx parlox init` |
 | [`@parlox/browser`](packages/browser) | On the store's pages: page views, behaviour, clicks, commerce events; replays of visits by automated browsers (people are never recorded) | `npm install @parlox/browser` |
 | [`@parlox/server`](packages/server) | On the store's server (Next.js, Express, Hono, Workers): AI fetchers and crawlers that never run JavaScript, and confirmed orders | `npm install @parlox/server` |
 
@@ -20,15 +23,15 @@ Stores without a build step use the hosted tag instead, served by Parlox as immu
 
 ```bash
 npm ci
-npm test            # builds and tests both packages
-npm run check-types # @arethetypeswrong/cli on both packages
+npm test            # builds and tests the three packages
+npm run check-types # @arethetypeswrong/cli on the two SDK packages
 ```
 
 Node 22.14 or later.
 
 ## Releasing
 
-Bump `version` in the package's `package.json`, merge to `main`, then push a tag `browser-v<version>` or `server-v<version>`. The Release workflow builds and tests with a read-only token, and after a maintainer approves the `npm` environment, publishes that exact tarball through npm trusted publishing (no npm token exists). Versions are immutable: a change to what runs on merchants' pages always gets a new version.
+Bump `version` in the package's `package.json`, merge to `main`, then push a tag `browser-v<version>`, `server-v<version>` or `parlox-v<version>` (the wizard). The Release workflow builds and tests with a read-only token, and after a maintainer approves the `npm` environment, publishes that exact tarball through npm trusted publishing (no npm token exists). The wizard's release is staged rather than published: a maintainer then approves it on npmjs.com (the package's Staged Packages, with two-factor authentication). Versions are immutable: a change to what runs on merchants' pages always gets a new version.
 
 ## Security
 
