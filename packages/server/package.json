@@ -126,7 +126,7 @@
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
-    "hono": "4.13.11",
+    "hono": "4.13.12",
     "typescript": "^5.7.0"
   },
   "engines": {
