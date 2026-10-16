@@ -15,7 +15,7 @@ import { packagesToAdd } from "../pins.js";
 import { serverPackageKept } from "../sdk-use.js";
 import { packageManagerOf, readJson, readText } from "../workspace.js";
 import type { Detection, Integration, IntegrationId, PlanInput } from "./types.js";
-import { appFolders } from "./vite-folders.js";
+import { appFolders, folderViteNamesSecretKey, viteBuildsBelow } from "./vite-folders.js";
 
 // A single-page app on Vite (Vite React, Vite Vue): one integration made from its framework's own pieces (which
 // package.json it is, and its browser-part edit), with everything about Vite itself shared. The browser part goes in
@@ -174,6 +174,12 @@ export function viteSpa(fw: ViteFramework): Integration {
       const exists = (rel: string) => { try { lstatSync(join(dir, rel)); return true; } catch { return false; } };
       const folders = appFolders(dir, root);
       const settings = readViteSettings(read, exists, folders);
+      // Besides the app's own build, what the key of a server part beside a Vite build is checked against too
+      // (apps.ts): a Vite config in or below this folder that names PARLOX_SECRET_KEY, and every Vite app below it. On
+      // Vercel the middleware's key is set where they build as well.
+      const named = settings.exposure ? null : folderViteNamesSecretKey(dir);
+      const below = settings.exposure || named ? null : viteBuildsBelow(dir, root);
+      const yarnReleases = [...new Set([...(settings.yarnReleases ?? []), ...(below?.yarnReleases ?? [])])];
       const { entry, reason } = entryOf(read, settings);
       const where = vercelRootOf(read, exists, folders.workspace);
       const data: ViteData = {
@@ -183,10 +189,10 @@ export function viteSpa(fw: ViteFramework): Integration {
         refusal: edgeRefusal(pkg, read),
         publicDir: settings.publicDir,
         envPrefix: settings.envPrefix,
-        exposure: settings.exposure,
+        exposure: settings.exposure ?? named ?? below?.exposure ?? null,
         vercelRoot: where && where.builds !== "app" ? where.why : null,
         vercelSettings: appSettingsOf(read, exists, folders.workspace)?.file ?? null,
-        ...(settings.yarnReleases ? { yarnReleases: settings.yarnReleases } : {}),
+        ...(yarnReleases.length ? { yarnReleases } : {}),
       };
       const host = detectHost(dir, root);
       // A refusal or an exposure holds on any host: then nothing depends on the answer, and nothing is asked.
