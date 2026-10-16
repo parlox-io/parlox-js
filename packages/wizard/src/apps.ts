@@ -35,9 +35,9 @@ export interface AppUnit {
    * dashboard is not visible: for the review and the report, kept, never dropped. */
   warnings: string[];
   /** The server part the wizard did not plan because a Vite build could bundle its key (or the wizard could not prove
-   * it does not): its detection and why, and, for Express 4 serving the Vite single-page app build of the same folder, the folder
-   * it serves the ownership file from (express-static.ts), so the Vite app's ownership file is planned. null: nothing
-   * was withheld. */
+   * it does not): its detection and why, and, for Express 4 serving the build of the same folder's Vite single-page
+   * app, the folder it serves the ownership file from (express-static.ts), so the Vite app's ownership file is
+   * planned. null: nothing was withheld. */
   withheld: { detection: Detection; exposure: SecretExposure; verifyFrom?: string } | null;
   /** Whether the server part the wizard plans sits beside a Vite build of this folder (or one below it) that the guard
    * checked and let the key through: a build there reads the host's variables too, so a key already set on the host
