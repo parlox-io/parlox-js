@@ -2,7 +2,7 @@
 
 Parlox shows merchants which AI agents visit their store, what they read, where they get stuck and whether they buy. This repository holds what merchants install: the two SDK packages and the install wizard that adds them. They are built, tested and published from here, and every published version carries an npm provenance attestation that links it to the commit and workflow run that produced it.
 
-**Fastest install:** run `npx parlox init` in your project. The wizard covers Next.js, Vite React, Express and Hono, and a repo with a frontend and a backend; it shows every change as a diff before it writes anything ([`packages/wizard`](packages/wizard)). For any other stack, the install guide is at https://gateway.parlox.io/install.md.
+**Fastest install:** run `npx parlox init` in your project. The wizard covers Next.js, Vite React, Vite Vue, Express and Hono, and a repo with a frontend and a backend; it shows every change as a diff before it writes anything ([`packages/wizard`](packages/wizard)). For any other stack, the install guide is at https://gateway.parlox.io/install.md.
 
 | Package | Runs | Install |
 |---|---|---|

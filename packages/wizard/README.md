@@ -1,7 +1,7 @@
 # parlox
 
-Install Parlox agent analytics into a **Next.js, Vite React, Express or Hono** project, or a repo that has a frontend
-and a backend: one command, one diff to confirm, and your secret key stays off your machine by default (only
+Install Parlox agent analytics into a **Next.js, Vite React, Vite Vue, Express or Hono** project, or a repo that has a
+frontend and a backend: one command, one diff to confirm, and your secret key stays off your machine by default (only
 `--local-key` puts a separate key in your app's env file, one that can only send crawler reports, because you asked
 for it).
 
@@ -17,28 +17,34 @@ npx parlox init
 |---|---|---|
 | Next.js 13+ | `<ParloxAnalytics />` in the root layout or `_app` | `withParlox()` in `middleware.ts` / `proxy.ts` |
 | Vite React | `<ParloxAnalytics />` beside `<App />` in the entry `index.html` names | On Vercel: a `middleware.ts` (Vercel Routing Middleware) that runs on page requests, not assets, added only when the wizard can prove the build cannot put the key into the browser code (when Vercel is set up at the workspace root, also only when the project's Root Directory is known to be the app folder: run `vercel link` in the app, or `vercel pull` at the root); otherwise the app gets the browser part only, and the report says why. Elsewhere: none (a static site has no server), so crawlers that do not run JavaScript are not seen. Wherever there is no middleware, the wizard writes `public/.well-known/parlox-verify` so the domain can still be verified |
+| Vite Vue | `import { init } from "@parlox/browser"` and `init({ publicKey: "pk_…" })` right after the imports of the entry `index.html` names | The same as Vite React |
 | Express 4 and 5 | The pinned Parlox tag, after a `parlox:wizard` marker comment, in each view with a `<head>` (EJS, Handlebars, Mustache, Nunjucks, Eta, Liquid, Pug or Jade; another view engine is a step by hand) or static `.html` page, at most 20 pages per app (with more, a step by hand) | `app.use(parlox())` right after `const app = express()`, before your routes |
 | Hono (Node, Bun, Cloudflare Workers and Pages, Vercel, AWS Lambda) | The pinned tag, after the same marker, in your one JSX layout or `html` template with a `<head>` | `app.use(parlox())` right after `new Hono()` |
 
-A folder with a Vite frontend served by its own Express or Hono server gets both: the component in the Vite entry, the
-middleware in the server file. Hosts usually give the build the same variables as the server, so the server part and
-its key are added only when the wizard can prove that no Vite build in the folder could put the key into the browser
-code; otherwise the app gets the browser part only, and the report says why. A `$` in a `.env` file that Vite loads
-when it builds, or that Bun loads when Bun runs the build, also withholds the key: both expand `$NAME` there from the
-build's environment, so the file could copy the key into a `VITE_` variable, which Vite puts in the browser code. The
-same check runs on every host, Cloudflare Workers included: whether an app deploys only as a Worker, whose runtime
-secrets the build does not see, cannot be read from its files (Workers Builds and other Git-connected hosts leave no
-trace in the repository). For a Hono app on Workers the host hand-off also says to add the key as a runtime secret
-(Settings → Variables & Secrets), not as a build variable. The wizard takes a Hono app with wrangler's config to run on
-Workers only when nothing says otherwise: no other host's file or link (a Vercel link, `vercel.json` or `now.json`,
-`netlify.toml` or a `netlify/` folder, `fly.toml`, `render.yaml`, `railway.*`, a `Dockerfile` or `Dockerfile.<name>`, a
-`Containerfile`, a Compose file, a `Procfile`, `nixpacks.toml`, `serverless.yml`, `app.yaml`) in the app folder or any
-folder above it up to the top of the repository, and no other runtime in its dependencies, its scripts or its code
-(`@hono/node-server`, `@hono/aws-lambda`, `hono/vercel`, `hono/aws-lambda`, `hono/bun`, `hono/deno`,
-`hono/lambda-edge`, `hono/netlify`, `srvx`, `@vercel/node`, the `vercel` CLI, `@netlify/functions`, `serverless-http`;
-Bun's types, or a `dev` or `start` script that runs `bun`; `Bun.serve()` or `Deno.serve()`). With any of them, the
-report and the hand-off name the runtime the evidence names (or none, where it names none), and beside another host's
-file, wrangler's config does not make Cloudflare the host.
+In a Vite Vue app the two lines run before the app mounts. The SDK keeps the first `init()` of a page, so the wizard
+adds them only where nothing of Parlox's is there yet: an entry that already loads `@parlox/browser` some other way, or
+an app whose `package.json` already lists it, gets the two lines to paste instead, so that a start with your own
+options (such as `consent: "required"`) is never set aside. So does an entry that already uses the name `init`.
+
+A folder with a Vite frontend served by its own Express or Hono server gets both: the component (React) or the `init`
+lines (Vue) in the Vite entry, the middleware in the server file. Hosts usually give the build the same variables as
+the server, so the server part and its key are added only when the wizard can prove that no Vite build in the folder
+could put the key into the browser code; otherwise the app gets the browser part only, and the report says why. A `$`
+in a `.env` file that Vite loads when it builds, or that Bun loads when Bun runs the build, also withholds the key:
+both expand `$NAME` there from the build's environment, so the file could copy the key into a `VITE_` variable, which
+Vite puts in the browser code. The same check runs on every host, Cloudflare Workers included: whether an app deploys
+only as a Worker, whose runtime secrets the build does not see, cannot be read from its files (Workers Builds and other
+Git-connected hosts leave no trace in the repository). For a Hono app on Workers the host hand-off also says to add the
+key as a runtime secret (Settings → Variables & Secrets), not as a build variable. The wizard takes a Hono app with
+wrangler's config to run on Workers only when nothing says otherwise: no other host's file or link (a Vercel link,
+`vercel.json` or `now.json`, `netlify.toml` or a `netlify/` folder, `fly.toml`, `render.yaml`, `railway.*`, a
+`Dockerfile` or `Dockerfile.<name>`, a `Containerfile`, a Compose file, a `Procfile`, `nixpacks.toml`,
+`serverless.yml`, `app.yaml`) in the app folder or any folder above it up to the top of the repository, and no other
+runtime in its dependencies, its scripts or its code (`@hono/node-server`, `@hono/aws-lambda`, `hono/vercel`,
+`hono/aws-lambda`, `hono/bun`, `hono/deno`, `hono/lambda-edge`, `hono/netlify`, `srvx`, `@vercel/node`, the `vercel`
+CLI, `@netlify/functions`, `serverless-http`; Bun's types, or a `dev` or `start` script that runs `bun`; `Bun.serve()`
+or `Deno.serve()`). With any of them, the report and the hand-off name the runtime the evidence names (or none, where
+it names none), and beside another host's file, wrangler's config does not make Cloudflare the host.
 
 An Express or Hono app that already reports to Parlox with its own code (a `fetch` to `/v1/s`, or `PARLOX_SECRET_KEY`
 used outside `@parlox/server`) gets no server part, since it would count each visit twice; the report names the file
@@ -127,10 +133,10 @@ or `--plain`. `NO_COLOR` (set to anything) turns off colour in both.
   `VITE_` name, or an `envPrefix` it starts with).
 - `.gitignore`: adds that env file if git does not already ignore it.
 - `public/.well-known/parlox-verify` (a Vite site without the middleware): the domain's verification code. Also for
-  Vite React beside an Express server whose server part is withheld, when that is Express 4 (4.10 or later), which
-  serves files inside `.well-known/`, and its server file shows `app.use(express.static(…))` serving the build (or the
-  public folder) at the site's root with nothing before it that could answer first. Express 5 does not serve them by
-  default, so there the report says how to prove the domain instead.
+  Vite React or Vite Vue beside an Express server whose server part is withheld, when that is Express 4 (4.10 or
+  later), which serves files inside `.well-known/`, and its server file shows `app.use(express.static(…))` serving the
+  build (or the public folder) at the site's root with nothing before it that could answer first. Express 5 does not
+  serve them by default, so there the report says how to prove the domain instead.
 - `package.json` and your lockfile, through your own package manager.
 
 Every edit keeps your file's formatting, quotes, semicolons, line endings and comments, and is made at a place the
@@ -188,8 +194,10 @@ kind.
 
 - Shopify, WordPress / WooCommerce: dedicated apps are planned.
 - React Router 7 in framework mode / Remix / Hydrogen, TanStack Start, Vike, Astro, Waku, RedwoodJS, SvelteKit, Nuxt,
-  Vue or Svelte on plain Vite, NestJS, HonoX, Deno projects without a `package.json`, Hono on Deno, Fastly or
-  Lambda@Edge: the wizard says so and points to the install guide.
+  VitePress, VuePress, vite-ssg, Quasar CLI, îles, Slidev, Svelte on plain Vite, NestJS, HonoX, Deno projects without a
+  `package.json`, Hono on Deno, Fastly or Lambda@Edge: the wizard says so and points to the install guide.
+- A folder that depends on both `react` and `vue`: the wizard cannot tell which one renders the app, so it installs it
+  as Vite React (whose edit goes only into a `createRoot(…).render(…)` call) and says that it added no Vue part.
 - Static sites off Vercel (Netlify, Cloudflare Pages, GitHub Pages, S3): browser part only; crawlers that never run
   JavaScript are not seen there. Pages a CDN serves from its cache never reach your server either.
 - HTML built at runtime from strings, an app created in more than one place, or an `express()` / `new Hono()` not
@@ -201,18 +209,19 @@ kind.
 npx parlox uninstall
 ```
 
-Shows a diff of what it would remove, then takes out exactly what it added: the component, the middleware line and
-its import (or the whole middleware file if the wizard created it), the tags it wrote in your pages (only those after
-its `parlox:wizard` marker: a tag you pasted yourself stays), the ownership file, the `PARLOX_VERIFY_TOKEN` line in
-your env file (the file itself when nothing else is left in it), and the Parlox packages (`@vercel/functions` stays:
-your project may use it). Two things stay, and the review and the report say why: `@parlox/server`, while a file of
-your own still imports it (your `purchase()` code, say; the wizard reads at most 2000 source files, none over 1 MB
-and none through a link, and keeps the package when it could not read them all), and a `PARLOX_SECRET_KEY` line, since the wizard cannot tell a key
-`--local-key` wrote from your own; delete that line yourself if it is the local key. Files the wizard edited go back byte for byte, except the env file: taking Parlox's lines out also adds a
-missing final newline and makes mixed line endings one kind. It leaves `.gitignore` as it is, since the line the
-install added keeps your env file out of git, and the report says so. It does not revoke any key: do that in the
-dashboard (Settings → Keys); if you used `--local-key`, revoke the key named "wizard · local dev · …" there too. What
-it may not change itself (an env file git tracks, a file it may not read) is listed as a step by hand; an app whose
-only finding is such a step is offered too, and is never said to be removed. A file it may not read (a link to a
-shared `.env`, say) counts only in an app Parlox is in (a `@parlox/*` dependency, or a file it read that holds
-Parlox's line): elsewhere the run says there is nothing to remove, and names that file.
+Shows a diff of what it would remove, then takes out exactly what it added: the component or the `init` lines, the
+middleware line and its import (or the whole middleware file if the wizard created it), the tags it wrote in your pages
+(only those after its `parlox:wizard` marker: a tag you pasted yourself stays), the ownership file, the
+`PARLOX_VERIFY_TOKEN` line in your env file (the file itself when nothing else is left in it), and the Parlox packages
+(`@vercel/functions` stays: your project may use it). Two things stay, and the review and the report say why:
+`@parlox/server`, while a file of your own still imports it (your `purchase()` code, say; the wizard reads at most 2000
+source files, none over 1 MB and none through a link, and keeps the package when it could not read them all), and a
+`PARLOX_SECRET_KEY` line, since the wizard cannot tell a key `--local-key` wrote from your own; delete that line
+yourself if it is the local key. Files the wizard edited go back byte for byte, except the env file: taking Parlox's
+lines out also adds a missing final newline and makes mixed line endings one kind. It leaves `.gitignore` as it is,
+since the line the install added keeps your env file out of git, and the report says so. It does not revoke any key: do
+that in the dashboard (Settings → Keys); if you used `--local-key`, revoke the key named "wizard · local dev · …" there
+too. What it may not change itself (an env file git tracks, a file it may not read) is listed as a step by hand; an app
+whose only finding is such a step is offered too, and is never said to be removed. A file it may not read (a link to a
+shared `.env`, say) counts only in an app Parlox is in (a `@parlox/*` dependency, or a file it read that holds Parlox's
+line): elsewhere the run says there is nothing to remove, and names that file.
