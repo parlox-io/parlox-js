@@ -32,7 +32,7 @@
     "shrinkwrap": "node scripts/shrinkwrap.mjs"
   },
   "dependencies": {
-    "@babel/parser": "7.29.9",
+    "@babel/parser": "8.0.7",
     "@clack/prompts": "1.8.1",
     "diff": "9.0.0",
     "ink": "6.8.0",
