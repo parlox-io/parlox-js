@@ -1,6 +1,6 @@
 {
   "name": "@parlox/browser",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Parlox agent analytics for storefronts: see which AI agents visit, what they read, where they get stuck and whether they buy.",
   "license": "MIT",
   "homepage": "https://github.com/parlox-io/parlox-js/tree/main/packages/browser#readme",
