@@ -49,7 +49,7 @@ const generated = (extra = {}) => fixture({
 });
 
 test("registered after Vite React", () => {
-  assert.deepEqual(INTEGRATIONS.map((i) => i.id).slice(0, 3), ["nextjs", "vite-react", "express"]);
+  assert.deepEqual(INTEGRATIONS.map((i) => i.id).slice(0, 4), ["nextjs", "vite-react", "vite-vue", "express"]);
 });
 
 test("the file a start or dev script runs", () => {
@@ -695,7 +695,9 @@ test("netlify.toml's strings are read as TOML reads them: no quotes, escapes in 
 });
 
 test("a Vite config in the folder, with vite declared here or at the workspace root, is checked unless every build command is a known non-Vite tool", () => {
-  const own = (scripts, files = {}) => beside({ scripts: { start: "node server.js", ...scripts }, dependencies: { express: "^5.1.0", vue: "^3.5.0" }, devDependencies: { vite: "^7.2.0" } }, { "vite.config.js": EXPOSING, ...files });
+  // Svelte on Vite, which no integration detects: what decides is the guard's own reading of the build commands (a Vite
+  // Vue or Vite React app's own config check is the stricter one: vite-vue.test.mjs).
+  const own = (scripts, files = {}) => beside({ scripts: { start: "node server.js", ...scripts }, dependencies: { express: "^5.1.0", svelte: "^5.0.0" }, devDependencies: { vite: "^7.2.0" } }, { "vite.config.js": EXPOSING, ...files });
   const opaque = (build) => `the "build" script (${JSON.stringify(build)}), which is not one of the builds the wizard checks`;
   for (const [build, files] of [
     ["nx build shop", { "project.json": JSON.stringify({ targets: { build: { executor: "@nx/vite:build" } } }), "nx.json": "{}" }],
@@ -826,7 +828,8 @@ const gitIn = (dir, ...args) => execFileSync("git", [...G, "-c", "protocol.file.
 const NOT_CHECKED_OUT = (rel) => new RegExp(`^Express: no server part was added\\. The wizard did not look inside ${rel}/, a git submodule that is not checked out, so it cannot prove that no Vite build there reads PARLOX_SECRET_KEY\\.`);
 
 test("install commands are held to the non-Vite tool list too (Vercel installs with the project's variables); husky's prepare is allowed", () => {
-  const app = (scripts, files = {}) => beside({ scripts: { build: "tsc", start: "node server.js", ...scripts }, dependencies: { express: "^5.1.0", vue: "^3.5.0" }, devDependencies: { vite: "^7.2.0" } }, { "vite.config.js": PLAIN_VITE, ...files });
+  // Svelte on Vite, which no integration detects, as above.
+  const app = (scripts, files = {}) => beside({ scripts: { build: "tsc", start: "node server.js", ...scripts }, dependencies: { express: "^5.1.0", svelte: "^5.0.0" }, devDependencies: { vite: "^7.2.0" } }, { "vite.config.js": PLAIN_VITE, ...files });
   const script = (name) => `package.json has a "${name}" script, which runs when the dependencies are installed, and the wizard does not check it`;
   for (const [label, scripts, files, why] of [
     ["I1 postinstall: nx run shop:build", { postinstall: "nx run shop:build" }, { "project.json": JSON.stringify({ targets: { build: { executor: "@nx/vite:build" } } }), "nx.json": "{}" }, script("postinstall")],

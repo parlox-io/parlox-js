@@ -21,7 +21,7 @@ const never = () => { throw new Error("nothing should run"); };
 
 test("welcome: the first step names the stacks the wizard installs into", () => {
   const { lastFrame, unmount } = render(createElement(App, { store: new WizardStore() }));
-  assert.match(lastFrame().replace(/\s+/g, " "), /1 Find your apps: Next\.js, Vite React, Express, Hono/);
+  assert.match(lastFrame().replace(/\s+/g, " "), /1 Find your apps: Next\.js, Vite React, Vite Vue, Express, Hono/);
   unmount();
 });
 

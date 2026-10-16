@@ -6,7 +6,7 @@ import { parseArgs, type Args } from "./args.js";
 import type { CliDeps } from "./deps.js";
 import { DetectError } from "./workspace.js";
 import { integrationOf } from "./integrations/registry.js";
-import { secretExposureOf } from "./integrations/vite-spa.js";
+import { isViteSpa, secretExposureOf } from "./integrations/vite-spa.js";
 import { whyOn } from "./edits/vite-exposure.js";
 import { OWN_REPORT_KIND } from "./own-reporting.js";
 import { ownershipLine } from "./ownership.js";
@@ -199,7 +199,7 @@ function secretLines(u: AppUnit, state: HostState | undefined, names: RunNames):
   const of = names.of(u);
   if (state?.secretStored === "secret") return [`PARLOX_SECRET_KEY${of} is stored on Vercel as a Secret (--visibility secret): no one on the team can read it back; your deployments and builds still receive it.`];
   if (state?.secretStored === "sensitive") return [`PARLOX_SECRET_KEY${of} is stored on Vercel as sensitive (--sensitive: this Vercel CLI has no --visibility option): it cannot be read back; your deployments and builds still receive it.`];
-  if (state?.secretAlreadySet && (u.server?.integration === "vite-react" || u.viteBeside)) return [`PARLOX_SECRET_KEY${of} was already set on Vercel, so the wizard created no key and cannot see which key it is or what it may send. The keys the wizard creates can send only crawler reports, so that a key this site's build could reach can do nothing more: check in Settings → Keys that this key is "Crawler reports only".`];
+  if (state?.secretAlreadySet && ((u.server && isViteSpa(u.server.integration)) || u.viteBeside)) return [`PARLOX_SECRET_KEY${of} was already set on Vercel, so the wizard created no key and cannot see which key it is or what it may send. The keys the wizard creates can send only crawler reports, so that a key this site's build could reach can do nothing more: check in Settings → Keys that this key is "Crawler reports only".`];
   return [];
 }
 

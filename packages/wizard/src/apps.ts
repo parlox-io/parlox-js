@@ -4,7 +4,7 @@ import { detectHost, unknownHost, type Host } from "./hosts.js";
 import { appFile, appName, type RunNames } from "./names.js";
 import { INTEGRATIONS, integrationOf } from "./integrations/registry.js";
 import { folderViteCheck, folderViteNamesSecretKey } from "./integrations/vite-folders.js";
-import { secretExposureOf, type ViteData } from "./integrations/vite-spa.js";
+import { isViteSpa, secretExposureOf, type ViteData } from "./integrations/vite-spa.js";
 import { viteVerifyServed } from "./integrations/express-static.js";
 import type { ExpressData } from "./integrations/express.js";
 import { denoProject, type HonoData } from "./integrations/hono.js";
@@ -35,7 +35,7 @@ export interface AppUnit {
    * dashboard is not visible: for the review and the report, kept, never dropped. */
   warnings: string[];
   /** The server part the wizard did not plan because a Vite build could bundle its key (or the wizard could not prove
-   * it does not): its detection and why, and, for Express 4 serving the Vite React build of the same folder, the folder
+   * it does not): its detection and why, and, for Express 4 serving the Vite single-page app build of the same folder, the folder
    * it serves the ownership file from (express-static.ts), so the Vite app's ownership file is planned. null: nothing
    * was withheld. */
   withheld: { detection: Detection; exposure: SecretExposure; verifyFrom?: string } | null;
@@ -58,8 +58,8 @@ export interface Scan {
 
 // Which integration's part wins when two match one folder: the browser part from the frontend's own entry, the server
 // part from the server framework. Next.js is always alone (its middleware is its server part).
-const BROWSER_ORDER: IntegrationId[] = ["nextjs", "vite-react", "hono", "express"];
-const SERVER_ORDER: IntegrationId[] = ["nextjs", "express", "hono", "vite-react"];
+const BROWSER_ORDER: IntegrationId[] = ["nextjs", "vite-react", "vite-vue", "hono", "express"];
+const SERVER_ORDER: IntegrationId[] = ["nextjs", "express", "hono", "vite-react", "vite-vue"];
 const pick = (found: Detection[], order: IntegrationId[], part: "browser" | "server"): Detection | null => {
   for (const id of order) {
     const d = found.find((x) => x.integration === id && x.parts[part]);
@@ -109,10 +109,10 @@ const dashboardNote = (d: Detection): string =>
 
 // The server integrations whose key would sit on the same host as a Vite build in their folder.
 const BESIDE_VITE = new Set<IntegrationId>(["express", "hono"]);
-/** Express only in devDependencies, beside a Vite React app: a dev helper (a Vite dev server, a mock API), not what
- * serves the site. */
+/** Express only in devDependencies, beside a Vite single-page app (React or Vue): a dev helper (a Vite dev server, a
+ * mock API), not what serves the site. */
 const devHelper = (d: Detection, found: Detection[]): boolean =>
-  d.integration === "express" && (d.data as ExpressData).devOnly && found.some((x) => x.integration === "vite-react");
+  d.integration === "express" && (d.data as ExpressData).devOnly && found.some((x) => isViteSpa(x.integration));
 
 /** The host the run names for an app (cli.ts), and the one the withheld note is worded for: detectHost, from the files
  * each host's tooling writes, and Cloudflare only where the app's server part does not say otherwise. A Hono server part
@@ -144,8 +144,9 @@ export function unitOf(dir: string, root: string, base: string, found: Detection
   const named = guarded ? folderViteNamesSecretKey(dir) : null;
   const exposure = named ?? (check ? secretExposureOf(found) ?? check.exposure : null);
   const browser = pick(found, BROWSER_ORDER, "browser");
-  // A withheld Express server that serves this folder's Vite React build: the ownership file can prove the domain.
-  const served = exposure && server!.integration === "express" && browser?.integration === "vite-react" ? viteVerifyServed(dir, server!.data as ExpressData, browser.data as ViteData) : null;
+  // A withheld Express server that serves this folder's Vite single-page app build: the ownership file can prove the
+  // domain.
+  const served = exposure && server!.integration === "express" && browser && isViteSpa(browser.integration) ? viteVerifyServed(dir, server!.data as ExpressData, browser.data as ViteData) : null;
   const vite = browser?.data as ViteData | undefined;
   const verifyNote = served ? [`${labelOf(server!)}: the ownership file goes in ${vite!.publicDir}/.well-known/parlox-verify: Express 4 serves ${served.folder}/ (express.static in ${served.serverFile})${served.folder === vite!.publicDir ? "." : ", where Vite copies the public folder when it builds."}`] : [];
   // The host the run will detect for this app (cli.ts), for the wording only.

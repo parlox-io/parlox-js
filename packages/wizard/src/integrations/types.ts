@@ -8,7 +8,7 @@ import type { PackageManager } from "../workspace.js";
 // (plan), and exactly how to undo it (unplan). Structure as in PostHog's wizard (src/programs/frameworks/, a registry)
 // and Sentry's (one folder per framework): here with fixed syntax-tree edits shown as a diff first.
 
-export type IntegrationId = "nextjs" | "vite-react" | "express" | "hono";
+export type IntegrationId = "nextjs" | "vite-react" | "vite-vue" | "express" | "hono";
 
 /** Where a part goes: a file (null with manualReason: the developer pastes a snippet), and what kind of edit. */
 export interface PartTarget { file: string | null; kind: string; manualReason?: string }

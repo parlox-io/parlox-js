@@ -48,9 +48,16 @@ export interface ViteData {
   yarnReleases?: string[];
 }
 
+/** The integrations viteSpa makes: the rules about a Vite single-page app (its exposure beside a server's key, a
+ * dev-only Express beside it, an Express server that serves its build, a key already set on Vercel) are about Vite,
+ * and hold for each of them alike. */
+export type ViteSpaId = "vite-react" | "vite-vue";
+const VITE_SPAS: ReadonlySet<IntegrationId> = new Set<ViteSpaId>(["vite-react", "vite-vue"]);
+export const isViteSpa = (id: IntegrationId): id is ViteSpaId => VITE_SPAS.has(id);
+
 /** What makes a Vite single-page app one framework's: which package.json is its, and its browser part. */
 export interface ViteFramework {
-  id: IntegrationId;
+  id: ViteSpaId;
   /** "Vite React", shown in facts and pickers. */
   label: string;
   /** Whether this package.json is the framework's app on Vite. Throws DetectError for an app of the framework the
@@ -62,7 +69,8 @@ export interface ViteFramework {
     kind: string;
     /** The paste-in snippet for an entry the wizard does not edit. */
     snippet(publicKey: string): string;
-    add(code: string, file: string, publicKey: string): SpliceEdit;
+    /** `have`: the dependencies package.json declares (plan-core.ts, declared). */
+    add(code: string, file: string, publicKey: string, have: Record<string, string>): SpliceEdit;
     remove(code: string, file: string): SpliceEdit;
     /** The step by hand that takes the browser part out. */
     removeSnippet: string;
@@ -93,9 +101,9 @@ const LOCAL_SKIP = "the Vercel middleware runs only on Vercel; check it after yo
 
 export const viteServerKind = (host: Host, data: ViteData): "vercel-edge" | "verify-file" => (host.id === "vercel" && !data.refusal && !data.vercelRoot && !data.exposure ? "vercel-edge" : "verify-file");
 
-/** Why an app's Vite build could bundle PARLOX_SECRET_KEY, from any Vite React detection among `detections`. */
+/** Why an app's Vite build could bundle PARLOX_SECRET_KEY, from any Vite single-page app among `detections`. */
 export function secretExposureOf(detections: Detection[]): SecretExposure | null {
-  for (const d of detections) if (d.integration === "vite-react" && (d.data as ViteData).exposure) return (d.data as ViteData).exposure;
+  for (const d of detections) if (isViteSpa(d.integration) && (d.data as ViteData).exposure) return (d.data as ViteData).exposure;
   return null;
 }
 
@@ -210,7 +218,7 @@ export function viteSpa(fw: ViteFramework): Integration {
         if ("refused" in got) plan.manual.push({ file: data.entry!, reason: got.refused, snippet, part: "browser" });
         else if (!data.entry || got.text === null) plan.manual.push({ file: data.entry ?? "index.html", reason: data.entryReason ?? `${data.entry} (named in index.html) does not exist.`, snippet, part: "browser" });
         else {
-          const e = fw.entry.add(got.text, data.entry, input.publicKey);
+          const e = fw.entry.add(got.text, data.entry, input.publicKey, have);
           if (!e.ok) plan.manual.push({ file: data.entry, reason: e.reason, snippet: e.snippet, part: "browser" });
           else if (e.changed) plan.changes.push({ path: data.entry, before: got.text, after: e.code, purpose: "browser part" });
         }

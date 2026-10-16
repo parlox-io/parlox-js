@@ -3,7 +3,7 @@ import { accent, muted } from "../theme.js";
 import { wrapWords } from "../../ui/text.js";
 
 const PARAGRAPH = "Parlox shows which AI agents visit your store, what they read, where they get stuck, and whether they buy.";
-const STEPS = ["Find your apps: Next.js, Vite React, Express, Hono", "Sign in in your browser", "Pick your site", "Review the changes before anything is written", "Install and connect your host"];
+const STEPS = ["Find your apps: Next.js, Vite React, Vite Vue, Express, Hono", "Sign in in your browser", "Pick your site", "Review the changes before anything is written", "Install and connect your host"];
 // The promises this run keeps. With --local-key the person asked for a key on this computer, so the second promise
 // says what happens instead of promising what this run will not keep. The wizard's keys can only send crawler
 // reports. Each promise fits one row of the panel at 100 columns.

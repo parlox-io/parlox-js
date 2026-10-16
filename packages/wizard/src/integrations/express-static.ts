@@ -182,9 +182,10 @@ export function verifyFolders(dir: string, pkg: Record<string, any>, file: strin
   return served;
 }
 
-/** Where Express serves the ownership file of a Vite React app in the same folder (`dir`) from, when its server part is
- * withheld: Vite's public folder itself, or the build's output folder, into which `vite build` copies the public folder
- * (build.copyPublicDir, read from the config). null when not proven: the file is then not planned. */
+/** Where Express serves the ownership file of a Vite single-page app (React or Vue) in the same folder (`dir`) from,
+ * when its server part is withheld: Vite's public folder itself, or the build's output folder, into which `vite build`
+ * copies the public folder (build.copyPublicDir, read from the config). null when not proven: the file is then not
+ * planned. */
 export function viteVerifyServed(dir: string, server: ExpressData, vite: ViteData): { folder: string; serverFile: string } | null {
   if (!server.serverFile || !server.appName || typeof vite.publicDir !== "string") return null;
   const read = readText(dir);
