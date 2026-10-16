@@ -6,7 +6,7 @@ import { pathOf } from "../edits/views.js";
 import { viteCopiesPublicDir, viteOutDir } from "../edits/vite-config.js";
 import { readJson, readText } from "../workspace.js";
 import type { ExpressData } from "./express.js";
-import type { ViteData } from "./vite-react.js";
+import type { ViteData } from "./vite-spa.js";
 
 // The folders an Express app provably serves at the site's root for GET /.well-known/parlox-verify: where an ownership
 // file proves the domain when the app's server part is withheld (apps.ts).

@@ -6,7 +6,7 @@ import { parseArgs, type Args } from "./args.js";
 import type { CliDeps } from "./deps.js";
 import { DetectError } from "./workspace.js";
 import { integrationOf } from "./integrations/registry.js";
-import { secretExposureOf } from "./integrations/vite-react.js";
+import { secretExposureOf } from "./integrations/vite-spa.js";
 import { whyOn } from "./edits/vite-exposure.js";
 import { OWN_REPORT_KIND } from "./own-reporting.js";
 import { ownershipLine } from "./ownership.js";

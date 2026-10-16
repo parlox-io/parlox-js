@@ -15,7 +15,7 @@ import { DetectError, GUIDE, hasDep, installedMajor, packageManagerOf, readJson,
 import { serverPackageKept } from "../sdk-use.js";
 import { planUseLine, shutdownNote, tryRead } from "./server-part.js";
 import type { Integration, PlanInput } from "./types.js";
-import { viteFoldersBelow } from "./vite-react.js";
+import { viteFoldersBelow } from "./vite-folders.js";
 
 // Express 4 and 5. The server part: `app.use(parlox())` right after `const app = express()` in the file
 // the app runs. NestJS (which uses Express underneath) is declined: its app is created by NestFactory, not express().
