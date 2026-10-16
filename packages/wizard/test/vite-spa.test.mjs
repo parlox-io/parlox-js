@@ -1,8 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, symlinkSync } from "node:fs";
+import { existsSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describeUnit, hostStepFor, planUnit, scanApps } from "../dist/apps.js";
+import { applyPlan } from "../dist/plan-core.js";
 import { vercelHost } from "../dist/hosts.js";
 import { fixture } from "./helpers.mjs";
 
@@ -71,5 +72,42 @@ for (const fw of Object.keys(FRAMEWORKS)) {
       assert.equal(l.server.parts.server.kind, "verify-file", `${label}, a linked folder`);
       assert.match(l.server.data.exposure.why, /^The wizard did not look inside shared\/, a link to another folder/, `${label}, a linked folder`);
     }
+  });
+}
+
+// ---- A Parlox start already in the index.html Vite uses: no second start in the entry ----
+
+const TAG = `<script async src="https://gateway.parlox.io/sdk/1.0.3/parlox.js" data-key="${PK}" data-consent="required"></script>`;
+const page = (fw, head, body = "") => `<!doctype html>\n<html>\n  <head>\n    <title>shop</title>\n${head}  </head>\n  <body>\n    <div id="app"></div>\n${body}    <script type="module" src="/${FRAMEWORKS[fw].entry}"></script>\n  </body>\n</html>\n`;
+const TAG_MANAGER = "Parlox starts once per page, with the options of whichever start runs first. If a tag manager (Google Tag Manager, say) also loads Parlox's tag on this site, the wizard cannot see it in your files: keep one of the two, since a start there with data-consent=\"required\" could otherwise be set aside.";
+const planOf = (dir, host = { id: "netlify", label: "Netlify", where: "", docs: null, vercelDir: null }) => planUnit(unitOf(dir), { publicKey: PK, verifyToken: "vt_fake", host }, { read: reader(dir), git });
+
+for (const fw of Object.keys(FRAMEWORKS)) {
+  const { entry, label } = FRAMEWORKS[fw];
+  test(`${label}: a Parlox tag or a module loading @parlox/browser in index.html makes the browser part a step by hand; a tag manager's start cannot be seen, and the review says so`, () => {
+    for (const [what, head, body, line] of [
+      ["the hosted tag", `    ${TAG}\n`, "", 5],
+      ["an inline module that loads @parlox/browser", "", `    <script type="module">\n      import { init } from "@parlox/browser"\n      init({ publicKey: "${PK}", consent: "required" })\n    </script>\n`, 9],
+    ]) {
+      const dir = spa(fw, { "netlify.toml": "", "index.html": page(fw, head, body) });
+      const plan = planOf(dir);
+      assert.deepEqual(plan.changes.map((c) => c.path), ["public/.well-known/parlox-verify"], `${what}: the entry is not changed`);
+      assert.deepEqual(plan.manual.map((m) => [m.file, m.part]), [[entry, "browser"]], what);
+      assert.equal(plan.manual[0].reason, `index.html already starts Parlox on line ${line} (a Parlox script tag, or a module that loads @parlox/browser), so the wizard adds no second start to ${entry}: Parlox keeps the first start of a page, and one in ${entry} could run first and set aside that start's options (data-consent="required", say). If that is this site's own start, nothing more is needed; to start Parlox from ${entry} instead, remove it and run the wizard again.`, what);
+      assert.equal(plan.install, null, `${what}: no package for a start that is already there`);
+      assert.equal(plan.warnings.includes(TAG_MANAGER), false, what);
+    }
+    // In an HTML comment it starts nothing: the browser part is added, with the note on a tag manager's start.
+    const commented = spa(fw, { "netlify.toml": "", "index.html": page(fw, `    <!-- ${TAG} -->\n`) });
+    const c = planOf(commented);
+    assert.deepEqual(c.changes.map((x) => x.path), [entry, "public/.well-known/parlox-verify"]);
+    assert.ok(c.warnings.includes(TAG_MANAGER), c.warnings.join("\n"));
+    // Already installed by the wizard, with a tag as well: nothing to change, nothing said about a second start.
+    const installed = spa(fw, { "netlify.toml": "" });
+    applyPlan(installed, planOf(installed));
+    writeFileSync(join(installed, "index.html"), page(fw, `    ${TAG}\n`));
+    const again = planOf(installed);
+    assert.deepEqual([again.changes, again.manual], [[], []]);
+    assert.equal(again.warnings.includes(TAG_MANAGER), false);
   });
 }

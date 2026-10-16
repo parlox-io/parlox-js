@@ -21,10 +21,18 @@ npx parlox init
 | Express 4 and 5 | The pinned Parlox tag, after a `parlox:wizard` marker comment, in each view with a `<head>` (EJS, Handlebars, Mustache, Nunjucks, Eta, Liquid, Pug or Jade; another view engine is a step by hand) or static `.html` page, at most 20 pages per app (with more, a step by hand) | `app.use(parlox())` right after `const app = express()`, before your routes |
 | Hono (Node, Bun, Cloudflare Workers and Pages, Vercel, AWS Lambda) | The pinned tag, after the same marker, in your one JSX layout or `html` template with a `<head>` | `app.use(parlox())` right after `new Hono()` |
 
-In a Vite Vue app the two lines run before the app mounts. The SDK keeps the first `init()` of a page, so the wizard
-adds them only where nothing of Parlox's is there yet: an entry that already loads `@parlox/browser` some other way, or
-an app whose `package.json` already lists it, gets the two lines to paste instead, so that a start with your own
-options (such as `consent: "required"`) is never set aside. So does an entry that already uses the name `init`.
+In a Vite Vue app the two lines go right after the entry's last import, so they run before the code below them (in
+create-vite's entry, `createApp(App).mount(…)`); an entry that already uses the name `init` gets them to paste instead.
+
+Parlox starts once per page, with the options of whichever start runs first, so the wizard adds no second start where
+it can see one, and gives you the lines to paste instead:
+- Vite React and Vite Vue: the `index.html` Vite uses already has a Parlox script tag, or a module that loads
+  `@parlox/browser` (not counting HTML comments);
+- Vite Vue also: the entry already loads `@parlox/browser` in another way, or the app's `package.json` already lists it
+  (Parlox may start in another of its files).
+
+A start the wizard cannot see is not checked: a tag your tag manager (Google Tag Manager, say) loads, which the review
+and the report remind you of, and, in Vite React, a start in another file of the app.
 
 A folder with a Vite frontend served by its own Express or Hono server gets both: the component (React) or the `init`
 lines (Vue) in the Vite entry, the middleware in the server file. Hosts usually give the build the same variables as

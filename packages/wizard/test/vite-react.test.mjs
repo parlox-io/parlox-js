@@ -16,6 +16,8 @@ import { BROWSER_VERSION, SERVER_VERSION, VERCEL_FUNCTIONS_VERSION } from "../di
 import { fixture } from "./helpers.mjs";
 import { startFakeAuth, startFakeGateway } from "./fake-servers.mjs";
 
+// The line on a tag manager's start, said wherever the entry edit is made (vite-spa.test.mjs).
+const notTagManager = (w) => !w.startsWith("Parlox starts once per page");
 const PK = "pk_" + "a1".repeat(12);
 // src/main.tsx exactly as create-vite 9.2.1 writes it (template react-ts).
 const MAIN_TSX = `import { StrictMode } from 'react'
@@ -639,7 +641,7 @@ test("on Vercel, a Vite config that could bundle the secret key: the browser par
     if (!readable) assert.deepEqual(plan.manual.map((m) => m.part), ["browser", "server"], label);
     assert.deepEqual(plan.install.args, ["install", "--save-exact", `@parlox/browser@${BROWSER_VERSION}`], label);
     const warning = warningFor(d.data.exposure, !!d.data.entry);
-    assert.deepEqual(plan.warnings, [warning], label);
+    assert.deepEqual(plan.warnings.filter(notTagManager), [warning], label);
     assert.deepEqual(d.notes, [warning], label);
     assert.doesNotMatch(viteReact.hostNotes(d, host, { browser: true, server: true, unitHasBrowser: true }).join("\n"), /Deploy on Vercel/, label);
   }

@@ -11,6 +11,8 @@ import { scanApps } from "../dist/apps.js";
 import { BROWSER_VERSION, SERVER_VERSION } from "../dist/versions.js";
 import { fixture } from "./helpers.mjs";
 
+// The line on a tag manager's start, said wherever the entry edit is made (vite-spa.test.mjs).
+const notTagManager = (w) => !w.startsWith("Parlox starts once per page");
 const PK = "pk_" + "b2".repeat(12);
 const MAIN_TSX = "import { StrictMode } from 'react'\nimport { createRoot } from 'react-dom/client'\nimport App from './App.tsx'\n\ncreateRoot(document.getElementById('root')!).render(\n  <StrictMode>\n    <App />\n  </StrictMode>,\n)\n";
 const INDEX_HTML = `<!doctype html>\n<html lang="en">\n  <head>\n    <meta charset="UTF-8" />\n    <title>shop</title>\n  </head>\n  <body>\n    <div id="root"></div>\n    <script type="module" src="/src/main.tsx"></script>\n  </body>\n</html>\n`;
@@ -312,7 +314,7 @@ test("Vercel set up at the workspace root: a middleware in the app folder is pla
     const plan = viteReact.plan(d, input(d.dir, vercelHost(root)));
     // The site still proves its domain: the ownership file in Vite's public folder, as off Vercel.
     assert.deepEqual(plan.changes.map((c) => c.path), ["src/main.tsx", "public/.well-known/parlox-verify"], label);
-    assert.deepEqual(plan.warnings, [`No Vercel middleware: ${d.data.vercelRoot}`], label);
+    assert.deepEqual(plan.warnings.filter(notTagManager), [`No Vercel middleware: ${d.data.vercelRoot}`], label);
     assert.deepEqual(d.notes, [`No Vercel middleware: ${d.data.vercelRoot}`], label);
     const notes = viteReact.hostNotes(d, vercelHost(root), role);
     assert.ok(notes.includes("Crawlers that do not run JavaScript are not seen until the middleware is added (see the note on where Vercel builds this project)."), `${label}: ${notes.join("\n")}`);

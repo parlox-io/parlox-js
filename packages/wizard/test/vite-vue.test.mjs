@@ -35,6 +35,7 @@ const OTHER = { id: "netlify", label: "Netlify", where: "Project configuration â
 const input = (dir, host, extra = {}) => ({ publicKey: PK, verifyToken: "vt_fake", host, versions: { browser: BROWSER_VERSION, server: SERVER_VERSION }, parts: { browser: true, server: true }, read: reader(dir), git, ...extra });
 const self = (dir) => viteVue.detect(dir, dir);
 const ROLE = { browser: true, server: true, unitHasBrowser: true };
+const TAG_MANAGER = "Parlox starts once per page, with the options of whichever start runs first. If a tag manager (Google Tag Manager, say) also loads Parlox's tag on this site, the wizard cannot see it in your files: keep one of the two, since a start there with data-consent=\"required\" could otherwise be set aside.";
 const ADDED = `import App from './App.vue'\nimport { init } from '@parlox/browser'\ninit({ publicKey: '${PK}' })\n`;
 
 test("registered right after Vite React; both are Vite single-page apps", () => {
@@ -164,7 +165,7 @@ test("on Vercel, a Vite config that could bundle the secret key: the browser par
   assert.deepEqual(plan.changes.map((c) => c.path), ["src/main.ts", "public/.well-known/parlox-verify"]);
   assert.deepEqual(plan.install.args, ["install", "--save-exact", `@parlox/browser@${BROWSER_VERSION}`]);
   const warning = "Your Vite config lists PARLOX_ in envPrefix, so the secret key would be bundled into the browser code. Parlox set up the browser part only; remove PARLOX_ from envPrefix and run the wizard again to add the server part.";
-  assert.deepEqual(plan.warnings, [warning]);
+  assert.deepEqual(plan.warnings, [TAG_MANAGER, warning], "the line on a tag manager's start first, as the browser part is planned first");
   assert.deepEqual(d.notes, [warning]);
   assert.deepEqual(secretExposureOf([d]), d.data.exposure);
 });
