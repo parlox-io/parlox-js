@@ -13,6 +13,7 @@
 // cookies; every listener and every hook it installs is wrapped so it can never break the host page; wrapped platform
 // functions (fetch, XMLHttpRequest.open, dataLayer.push, history) keep their behaviour and return values exactly.
 
+import { safePath } from "./url.js";
 import { cut, trimEnd } from "./text.js";
 
 export interface RecorderConfig {
@@ -72,18 +73,7 @@ function run(opts: TrackerOptions, w: Window & { parlox?: WindowParlox; dataLaye
     target.addEventListener(type, (e) => { try { fn(e); } catch { /* never break the page */ } }, o);
   }
 
-  // Capability tokens live in paths on many platforms (Shopify /checkouts/cn/<token>, /orders/<token>,
-  // /account/reset/<id>/<token>, WooCommerce ?key=wc_order_...). They never leave the page.
-  function safePath(href: string): string {
-    let u: URL;
-    try { u = new URL(href, location.href); } catch { return "/"; }
-    const path = u.pathname.replace(/\/account\/(reset|activate)\/.*/, "/account/$1/:token")
-      .split("/").map((seg) => ((/^[A-Za-z0-9_]{20,}$/.test(seg) && /\d/.test(seg) && /[A-Za-z]/.test(seg)) || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(seg) ? ":token" : seg)).join("/");
-    const keep = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "ref", "gclid", "fbclid", "srsltid"];
-    const q: string[] = [];
-    keep.forEach((k) => { const v = u.searchParams.get(k); if (v) q.push(k + "=" + encodeURIComponent(v.slice(0, 120))); });
-    return u.origin + path + (q.length ? "?" + q.join("&") : "");
-  }
+  // URLs leave as safePath makes them (url.ts): capability tokens never leave the page.
   // The referrer gets the same treatment: a reset link or checkout page the visitor came from carries its token in
   // the path or the query, and only the source matters here.
   function safeReferrer(): string | null {

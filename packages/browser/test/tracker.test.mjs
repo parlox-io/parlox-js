@@ -285,6 +285,14 @@ test("a field named __proto__ cannot reach Object.prototype, and track() ignores
   assert.ok(!events().some((e) => ["constructor", "toString", "__proto__"].includes(e.ev)));
 });
 
+test("a campaign parameter cut inside an emoji does not stop the tracker", async () => {
+  const { mod, beacons } = await page("https://shop.example.com/products/tent?utm_content=" + encodeURIComponent("x".repeat(119) + "\u{1F525}\u{1F525}"));
+  mod.init({ publicKey: KEY, endpoint: ENDPOINT, recordAgents: false });
+  await tick();
+  assert.equal(beacons.length, 1);
+  assert.equal(beacons[0].body.url, "https://shop.example.com/products/tent?utm_content=" + encodeURIComponent("x".repeat(119) + "\u{1F525}"), "cut at 120 characters, an emoji counted as one");
+});
+
 test("track() records commerce with the tier it came from; unknown names and junk properties are dropped", async () => {
   const { mod, events } = await page();
   mod.init({ publicKey: KEY, endpoint: ENDPOINT, recordAgents: false });
