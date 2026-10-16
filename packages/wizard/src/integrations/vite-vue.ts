@@ -6,9 +6,10 @@ import { viteSpa } from "./vite-spa.js";
 // Vite Vue: vue and vite in package.json, and no next. The browser part is init({ publicKey }) from @parlox/browser
 // right after the imports of the entry index.html names (edits/vite-init.ts): Vue needs no component, and the call runs
 // before the app mounts. The server part, the ownership file and every check on the Vite build are Vite React's
-// (vite-spa.ts). A folder that also depends on react is not taken as a Vue app: the wizard cannot tell which framework
-// renders it, so this integration declines it, and the refusal is said beside Vite React's install (apps.ts,
-// detectFolder), which edits only a createRoot(…).render(…) call.
+// (vite-spa.ts). A folder that also depends on another framework that renders apps (React, Preact, Svelte, Solid, or
+// their Vite plugins) is not taken as a Vue app: the wizard cannot tell which one renders it, and a SvelteKit app, say,
+// has a server of its own. This integration declines it; beside Vite React's install the refusal is said in its review
+// (apps.ts, detectFolder), and Vite React edits only a createRoot(…).render(…) call.
 
 // What builds on Vue and Vite but is not a single-page app with an index.html entry: frameworks with their own server
 // and routing (each needs its own server adapter, not covered yet), and site generators with their own entry and
@@ -34,6 +35,9 @@ const OWN_ENTRY: Array<[string, string]> = [
   ["@slidev/cli", "Slidev"],
 ];
 
+// The other frameworks that render apps, and their Vite plugins (each read from the npm registry).
+const OTHER_RENDERERS = ["@vitejs/plugin-react", "@vitejs/plugin-react-swc", "preact", "@preact/preset-vite", "svelte", "@sveltejs/vite-plugin-svelte", "solid-js", "vite-plugin-solid"];
+
 export const viteVue: Integration = viteSpa({
   id: "vite-vue",
   label: "Vite Vue",
@@ -45,6 +49,8 @@ export const viteVue: Integration = viteSpa({
     if (entry) throw new DetectError("not-supported", `${entry[1]} (${entry[0]}) builds the site from its own entry and routing, not a Vite Vue single-page app's index.html; the wizard does not cover it yet. See ${GUIDE}`);
     if (!hasDep(pkg, "vite")) return false;
     if (hasDep(pkg, "react")) throw new DetectError("not-supported", `This folder depends on both vue and react, so the wizard cannot tell which one renders the app, and adds no Vue browser part here (Vite React's part goes only into a createRoot(…).render(…) call). If Vue renders it, add the browser part by hand: see ${GUIDE}`);
+    const other = OTHER_RENDERERS.find((name) => hasDep(pkg, name));
+    if (other) throw new DetectError("not-supported", `This folder depends on both vue and ${other}, so the wizard cannot tell which one renders the app, and adds no Vue browser part here. If Vue renders it, add the browser part by hand: see ${GUIDE}`);
     return true;
   },
   entry: {

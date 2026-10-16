@@ -204,8 +204,9 @@ kind.
 - React Router 7 in framework mode / Remix / Hydrogen, TanStack Start, Vike, Astro, Waku, RedwoodJS, SvelteKit, Nuxt,
   VitePress, VuePress, vite-ssg, Quasar CLI, îles, Slidev, Svelte on plain Vite, NestJS, HonoX, Deno projects without a
   `package.json`, Hono on Deno, Fastly or Lambda@Edge: the wizard says so and points to the install guide.
-- A folder that depends on both `react` and `vue`: the wizard cannot tell which one renders the app, so it installs it
-  as Vite React (whose edit goes only into a `createRoot(…).render(…)` call) and says that it added no Vue part.
+- A folder that depends on `vue` and on another framework that renders apps (`react`, `preact`, `svelte`, `solid-js`,
+  or one of their Vite plugins): the wizard cannot tell which one renders the app, so it adds no Vue part and says so.
+  With `react`, it installs the folder as Vite React, whose edit goes only into a `createRoot(…).render(…)` call.
 - Static sites off Vercel (Netlify, Cloudflare Pages, GitHub Pages, S3): browser part only; crawlers that never run
   JavaScript are not seen there. Pages a CDN serves from its cache never reach your server either.
 - HTML built at runtime from strings, an app created in more than one place, or an `express()` / `new Hono()` not

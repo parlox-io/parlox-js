@@ -101,6 +101,28 @@ test("react and vue in one folder: Vite React's part as before, and Vite Vue's r
   assert.deepEqual(scanApps(fixture({ ...files, "package.json": JSON.stringify(noVite) })).units, []);
 });
 
+test("vue beside another framework that renders apps (Svelte, Preact, Solid, React's Vite plugin): declined as ambiguous, as with react", () => {
+  const ambiguous = (dep) => `This folder depends on both vue and ${dep}, so the wizard cannot tell which one renders the app, and adds no Vue browser part here. If Vue renders it, add the browser part by hand: see https://gateway.parlox.io/install.md`;
+  for (const dep of ["@vitejs/plugin-react", "@vitejs/plugin-react-swc", "preact", "@preact/preset-vite", "svelte", "@sveltejs/vite-plugin-svelte", "solid-js", "vite-plugin-solid"]) {
+    const dir = app({ "package.json": pkgJson({ devDependencies: { vite: "^8.3.0", "@vitejs/plugin-vue": "^6.0.8", [dep]: "1.0.0" } }) });
+    assert.throws(() => self(dir), (e) => e.code === "not-supported" && e.message === ambiguous(dep), dep);
+    assert.deepEqual(scanApps(dir).units, [], dep);
+    assert.equal(scanApps(dir).problems[0]?.error.message, ambiguous(dep), dep);
+  }
+  // A SvelteKit app that also depends on vue (it has its own server, and would otherwise get a root middleware on
+  // Vercel).
+  const kit = app({ "vercel.json": "{}", "package.json": pkgJson({ devDependencies: { vite: "^8.3.0", svelte: "^5.57.2", "@sveltejs/kit": "^3.1.0" } }) });
+  assert.throws(() => self(kit), (e) => e.message === ambiguous("svelte"));
+  // React's Vite plugin in the package, react itself only at the workspace root.
+  const root = fixture({
+    "package.json": JSON.stringify({ name: "mono", private: true, workspaces: ["web"], dependencies: { react: "^19.2.0", "react-dom": "^19.2.0" } }), "package-lock.json": "{}",
+    "web/package.json": JSON.stringify({ name: "web", scripts: { build: "vite build" }, dependencies: { vue: "^3.5.0", "@vitejs/plugin-react": "^5.0.0" }, devDependencies: { vite: "^8.3.0" } }), "web/netlify.toml": "",
+    "web/index.html": '<div id="root"></div><script type="module" src="/src/main.jsx"></script>', "web/src/main.jsx": "import { createRoot } from 'react-dom/client'\ncreateRoot(root).render(<App />)\n",
+  });
+  assert.deepEqual(scanApps(join(root, "web")).units, []);
+  assert.equal(scanApps(join(root, "web")).problems[0]?.error.message, ambiguous("@vitejs/plugin-react"));
+});
+
 test("off Vercel: the init lines and the ownership file; no server part, and the report says crawlers are not seen", () => {
   const dir = app({ "netlify.toml": "" });
   const d = self(dir);
