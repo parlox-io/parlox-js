@@ -13,6 +13,9 @@
 // cookies; every listener and every hook it installs is wrapped so it can never break the host page; wrapped platform
 // functions (fetch, XMLHttpRequest.open, dataLayer.push, history) keep their behaviour and return values exactly.
 
+import { safePath } from "./url.js";
+import { cut, trimEnd } from "./text.js";
+
 export interface RecorderConfig {
   k: string; sid: string; endpoint: string; pv: () => number; url: () => string;
   /** False once the recording must stop for good (consent withdrawn, session forgotten). Absent in pre-1.0.1 tags. */
@@ -62,26 +65,15 @@ function run(opts: TrackerOptions, w: Window & { parlox?: WindowParlox; dataLaye
   const key = opts.publicKey;
   let consentRequired = opts.consent === "required";
   let started = false;
-  const endpoint = opts.endpoint.replace(/\/+$/, "") + "/v1/b";
-  const recEndpoint = opts.endpoint.replace(/\/+$/, "") + "/v1/r";
+  const endpoint = trimEnd(opts.endpoint, 47) + "/v1/b";
+  const recEndpoint = trimEnd(opts.endpoint, 47) + "/v1/r";
   const IDLE_MS = 30 * 60 * 1000, MAX_EVENTS = 100, MAX_PAGE_EVENTS = 500;
 
   function on(target: EventTarget, type: string, fn: (e: any) => void, o?: AddEventListenerOptions) {
     target.addEventListener(type, (e) => { try { fn(e); } catch { /* never break the page */ } }, o);
   }
 
-  // Capability tokens live in paths on many platforms (Shopify /checkouts/cn/<token>, /orders/<token>,
-  // /account/reset/<id>/<token>, WooCommerce ?key=wc_order_...). They never leave the page.
-  function safePath(href: string): string {
-    let u: URL;
-    try { u = new URL(href, location.href); } catch { return "/"; }
-    const path = u.pathname.replace(/\/account\/(reset|activate)\/.*/, "/account/$1/:token")
-      .split("/").map((seg) => ((/^[A-Za-z0-9_]{20,}$/.test(seg) && /\d/.test(seg) && /[A-Za-z]/.test(seg)) || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(seg) ? ":token" : seg)).join("/");
-    const keep = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "ref", "gclid", "fbclid", "srsltid"];
-    const q: string[] = [];
-    keep.forEach((k) => { const v = u.searchParams.get(k); if (v) q.push(k + "=" + encodeURIComponent(v.slice(0, 120))); });
-    return u.origin + path + (q.length ? "?" + q.join("&") : "");
-  }
+  // URLs leave as safePath makes them (url.ts): capability tokens never leave the page.
   // The referrer gets the same treatment: a reset link or checkout page the visitor came from carries its token in
   // the path or the query, and only the source matters here.
   function safeReferrer(): string | null {
@@ -216,8 +208,9 @@ function run(opts: TrackerOptions, w: Window & { parlox?: WindowParlox; dataLaye
       lastActT: 0, lastAct: "", lastErrT: 0, errShownT: 0,
       pathLen: 0, firstX: null, firstY: null, lastX: null, lastY: null, lastMoveT: null, maxSpeed: 0,
       dirChanges: 0, lastDX: 0, lastDY: 0, scrollDeltas: [], lastScrollY: w.scrollY || 0,
-      moveToClick: null, seen: {}, flags: {}, lastMutT: 0, lastCommerceT: 0, delayed: [], recent: [], rageAt: 0,
-      fields: {}, focused: null, lastInputT: 0 };
+      // Keyed by names the page chooses (a field named __proto__), so none of them has a prototype to reach.
+      moveToClick: null, seen: Object.create(null), flags: Object.create(null), lastMutT: 0, lastCommerceT: 0, delayed: [], recent: [], rageAt: 0,
+      fields: Object.create(null), focused: null, lastInputT: 0 };
     collectEnv();
     maybeRecord();
     let httpStatus: number | null = null;
@@ -252,7 +245,7 @@ function run(opts: TrackerOptions, w: Window & { parlox?: WindowParlox; dataLaye
       scroll_uniform: p.scrollDeltas.length >= 3 && p.scrollDeltas.every((d) => d === p.scrollDeltas[0]),
     };
     // Per-field friction (form-analytics style): times entered, changes, keystrokes, validation errors, ms focused.
-    const fields: Record<string, Field> = {}; let any = false;
+    const fields: Record<string, Field> = Object.create(null); let any = false;
     for (const k in p.fields) { const st = p.fields[k]; fields[k] = { f: st.f, c: st.c, k: st.k, inv: st.inv, ms: st.ms }; any = true; }
     if (p.focused && fields[p.focused.k]) fields[p.focused.k].ms += focusedMs(Date.now());
     if (any) eng.fields = fields;
@@ -341,56 +334,158 @@ function run(opts: TrackerOptions, w: Window & { parlox?: WindowParlox; dataLaye
   // What was clicked: text (with emails and long numbers masked), tag, id, classes, link path, and a short DOM path
   // (PostHog/Heap style) so the same control can be recognised on stores without ids.
   function mask(s: unknown): string { return String(s).replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "[email]").replace(/\+?\d[\d\s().-]{7,}\d/g, "[number]").replace(/\d{4,}/g, "#"); }
-  // Text is taken only from real buttons and simple links (no child elements): container-sized "buttons" such as
-  // account menus or saved-address tiles carry names and addresses, so they are identified by DOM path alone.
+  // Every name that leaves (the label and the accessible name) is masked, on one line, and at most 60 characters. It
+  // is collapsed and cut to 300 before it is masked: the email pattern costs the square of its input's length, and
+  // collapsing first means white space cannot push an email past the cut. Every cut of the page's own words here goes
+  // through cut (text.ts), which keeps whole emoji and leaves no unpaired surrogate.
+  function cleanName(s: string): string { return cut(mask(cut(String(s).replace(/\s+/g, " ").trim(), 300)), 60); }
+  // Text is taken only from controls with little inside them (at most 5 elements, counted no further than 6):
+  // container-sized "buttons" such as account menus or saved-address tiles carry names and addresses, so they are
+  // identified by DOM path alone.
+  function simple(el: Element): boolean {
+    const w = document.createTreeWalker(el, 1); // elements
+    for (let n = 0; w.nextNode(); ) if (++n > 5) return false;
+    return true;
+  }
+  function hasText(el: Element): boolean {
+    const w = document.createTreeWalker(el, 4); // text
+    while (w.nextNode()) if (/\S/.test(w.currentNode.nodeValue || "")) return true;
+    return false;
+  }
+  // Text of more than 2 lines is not a label: a flat address on a button is 3 or 4 (by <br> or by line breaks).
+  function multiline(el: Element, text: string): boolean {
+    return el.getElementsByTagName("br").length >= 2 || text.split("\n").filter((l) => l.trim()).length > 2;
+  }
+  // An area the merchant marked (data-plx-mask, data-plx-block) reaches into the shadow roots inside it.
+  function marked(el: Element, sel: string): boolean {
+    let n: Element | null = el;
+    while (n) {
+      if (n.closest(sel)) return true;
+      const root = n.getRootNode() as ShadowRoot;
+      n = root && root.host ? root.host : null;
+    }
+    return false;
+  }
+  // A form field's own <label>: the first the browser associates with it, or else the one that names it by id or
+  // the one around it.
+  function fieldLabel(t: Element): Element | null {
+    try { const ls = (t as HTMLInputElement).labels; if (ls) return ls.length ? ls[0] : null; } catch { /* below */ }
+    if (t.id) { const lab = document.querySelector('label[for="' + t.id.replace(/["\\]/g, "") + '"]'); if (lab) return lab; }
+    return t.closest("label");
+  }
   function labelOf(t: Element): string {
     const el = t as HTMLElement & { value?: string; type?: string };
     const tag = el.tagName.toLowerCase(), type = String(el.type || "").toLowerCase();
-    if (tag === "input") return type === "submit" || type === "button" ? String(el.value || "") : "";
+    if (tag === "input") {
+      if (type === "submit" || type === "button") return String(el.value || "");
+      if (!isChoice(el)) return "";
+      // A checkbox's or radio's label is its name, unless the name is its value (never a label the page shows).
+      const r = choiceName(el);
+      return r.withheld || r.source ? "" : r.name;
+    }
     if (tag === "select" || tag === "textarea" || el.isContentEditable) return "";
     const aria = el.getAttribute("aria-label") || el.getAttribute("title") || "";
     if (aria) return aria;
-    return el.querySelectorAll("*").length <= 5 ? String(el.innerText || "") : "";
+    if (!simple(el)) return "";
+    const text = String(el.innerText || "");
+    return multiline(el, text) ? "" : text;
   }
   function bareInfo(t: Element | null): Record<string, unknown> { return t && t.tagName ? { tag: t.tagName.toLowerCase(), dom: domPath(t) } : {}; }
   // The accessibility role and name are what a browser agent sees of a control (Playwright's getByRole, the
   // accessibility tree every agent framework reads), so they are the control's identity here too.
   const IMPLICIT_ROLE: Record<string, string> = { button: "button", a: "link", select: "combobox", textarea: "textbox", summary: "button", option: "option" };
   function accRole(t: Element): string {
-    const r = t.getAttribute("role"); if (r) return String(r).split(/\s+/)[0].toLowerCase().slice(0, 20);
+    const r = t.getAttribute("role"); if (r) return cut(String(r).split(/\s+/)[0].toLowerCase(), 20);
     const tag = t.tagName.toLowerCase();
     if (tag === "input") { const ty = String((t as HTMLInputElement).type || "text").toLowerCase(); return ty === "submit" || ty === "button" || ty === "image" ? "button" : ty === "checkbox" || ty === "radio" ? ty : ty === "search" ? "searchbox" : "textbox"; }
     if (tag === "a") return t.getAttribute("href") ? "link" : "generic";
     return IMPLICIT_ROLE[tag] || "generic";
   }
   function textOf(el: Element): string { return (el as HTMLElement).innerText || el.textContent || ""; }
-  function accName(t: Element): string {
+  // The accessible name, in the browser's order (aria-labelledby, aria-label, a field's label, the control's content,
+  // title), by labelOf's rule: text is read only from an element with at most 5 elements inside it and at most 2 lines,
+  // whether it is the control or the element aria-labelledby points to. A checkbox or radio has a rule of its own
+  // (choiceName); no other field's <label> is read. When the name is text these rules keep on the page (a saved-address
+  // card, a radio labelled with an address), it is withheld, not replaced by a lesser name, and the click says so
+  // (aname_withheld), so a control with a withheld name is never counted as a control without one. A name that is not
+  // text the page shows (a checkbox's or radio's value) says where it came from (aname_source), so it is never shown as
+  // a label.
+  interface Name { name: string; withheld: boolean; source?: "value" }
+  const named = (name: string): Name => ({ name, withheld: false });
+  const WITHHELD: Name = { name: "", withheld: true };
+  function ruleText(el: Element): Name {
+    if (!simple(el)) return hasText(el) || el.querySelector('img[alt]:not([alt=""]), svg[aria-label]') ? WITHHELD : named("");
+    const text = textOf(el);
+    return multiline(el, text) ? WITHHELD : named(text);
+  }
+  // The text of the elements aria-labelledby points to, each read with `read`; null when there is none.
+  function labelledBy(t: Element, read: (el: Element) => Name): Name | null {
+    const by = t.getAttribute("aria-labelledby");
+    if (!by) return null;
+    const parts: string[] = []; let withheld = false;
+    by.split(/\s+/).forEach((id) => { const el = id ? document.getElementById(id) : null; if (el) { const r = read(el); parts.push(r.name); withheld = withheld || r.withheld; } });
+    if (withheld) return WITHHELD;
+    return parts.join(" ").trim() ? named(parts.join(" ")) : null;
+  }
+  // A checkbox or radio is a size or a colour, and also a saved address or a saved card. Its name, in the browser's
+  // order (aria-labelledby, aria-label, <label>, title), is used when that text (for aria-labelledby and <label>, by
+  // labelOf's rule) is at most 24 characters once masked and has no digit: a house number is what nearly every address
+  // has. Otherwise its own value attribute names it when that is a short plain word ("addr_7", "size-10"), marked as
+  // a value; otherwise it is withheld.
+  const SHORT = 24;
+  function isChoice(t: Element): boolean {
+    const type = String((t as HTMLInputElement).type || "").toLowerCase();
+    return t.tagName.toLowerCase() === "input" && (type === "checkbox" || type === "radio");
+  }
+  function short(s: string): boolean { return cleanName(s).length <= SHORT && s.length <= 300 && !/\d/.test(s); }
+  function choiceText(el: Element): Name {
+    const r = ruleText(el);
+    if (r.withheld || !r.name.trim()) return r;
+    return short(r.name) ? r : WITHHELD;
+  }
+  function choiceValue(t: Element): string {
+    const v = t.getAttribute("value") || "";
+    return /^[A-Za-z0-9._-]{1,24}$/.test(v) && !/[A-Za-z0-9]{20,}/.test(v) ? v : "";
+  }
+  function choiceName(t: Element): Name {
+    let r = labelledBy(t, choiceText);
+    const own = (s: string | null): Name | null => (s && s.trim() ? (short(s) ? named(s) : WITHHELD) : null);
+    if (!r) r = own(t.getAttribute("aria-label"));
+    if (!r) { const lab = fieldLabel(t); if (lab) { const l = choiceText(lab); if (l.withheld || l.name.trim()) r = l; } }
+    if (!r) r = own(t.getAttribute("title"));
+    if (!r) return named("");
+    if (!r.withheld) return r;
+    const v = choiceValue(t);
+    return v ? { name: v, withheld: false, source: "value" } : r;
+  }
+  function accName(t: Element): Name {
     try {
-      const by = t.getAttribute("aria-labelledby");
-      if (by) { const parts: string[] = []; by.split(/\s+/).forEach((id) => { const el = document.getElementById(id); if (el) parts.push(textOf(el)); }); if (parts.join(" ").trim()) return parts.join(" "); }
-      const al = t.getAttribute("aria-label"); if (al) return al;
+      if (isChoice(t)) return choiceName(t);
+      const by = labelledBy(t, ruleText); if (by) return by;
+      const al = t.getAttribute("aria-label"); if (al) return named(al);
       const tag = t.tagName.toLowerCase();
       if (tag === "input" || tag === "select" || tag === "textarea") {
-        if (t.id) { const lab = document.querySelector('label[for="' + t.id.replace(/["\\]/g, "") + '"]'); if (lab) return textOf(lab); }
-        const wrap = t.closest("label"); if (wrap) return textOf(wrap);
         const inp = t as HTMLInputElement;
-        if (tag === "input" && (inp.type === "submit" || inp.type === "button")) return String(inp.value || "");
-        return t.getAttribute("placeholder") || t.getAttribute("title") || "";
+        if (tag === "input" && (inp.type === "submit" || inp.type === "button")) return named(String(inp.value || ""));
+        const lab = fieldLabel(t);
+        if (lab && hasText(lab)) return WITHHELD;
+        return named(t.getAttribute("placeholder") || t.getAttribute("title") || "");
       }
-      const img = t.querySelector("img[alt], svg[aria-label]");
-      let text = textOf(t).trim();
-      if (!text && img) text = img.getAttribute("alt") || img.getAttribute("aria-label") || "";
-      return text || t.getAttribute("title") || "";
-    } catch { return ""; }
+      const r = ruleText(t);
+      if (r.withheld) return r;
+      let text = r.name.trim();
+      if (!text && simple(t)) { const img = t.querySelector("img[alt], svg[aria-label]"); if (img) text = img.getAttribute("alt") || img.getAttribute("aria-label") || ""; }
+      return named(text || t.getAttribute("alt") || t.getAttribute("title") || "");
+    } catch { return named(""); }
   }
   function ctrlAttrs(t: Element): Record<string, string> {
     const a: Record<string, string> = {};
     try {
-      const name = t.getAttribute("name"); if (name) a.name = String(name).slice(0, 40);
-      const type = t.getAttribute("type"); if (type) a.type = String(type).toLowerCase().slice(0, 20);
+      const name = t.getAttribute("name"); if (name) a.name = cut(String(name), 40);
+      const type = t.getAttribute("type"); if (type) a.type = cut(String(type).toLowerCase(), 20);
       const form = (t as HTMLInputElement).form || t.closest("form");
-      if (form) { try { a.form = new URL(safePath(form.getAttribute("action") || location.href)).pathname.slice(0, 80); } catch { /* unparsable */ } const fr = form.getAttribute("role"); if (fr) a.form_role = String(fr).slice(0, 20); }
-      const da = t.getAttribute("data-action") || t.getAttribute("data-hook"); if (da) a.data = String(da).slice(0, 40);
+      if (form) { try { a.form = cut(new URL(safePath(form.getAttribute("action") || location.href)).pathname, 80); } catch { /* unparsable */ } const fr = form.getAttribute("role"); if (fr) a.form_role = cut(String(fr), 20); }
+      const da = t.getAttribute("data-action") || t.getAttribute("data-hook"); if (da) a.data = cut(String(da), 40);
     } catch { /* partial */ }
     return a;
   }
@@ -406,7 +501,7 @@ function run(opts: TrackerOptions, w: Window & { parlox?: WindowParlox; dataLaye
       }
       parts.unshift(seg); n = cur.parentElement; depth++;
     }
-    return parts.join(">").slice(0, 120);
+    return cut(parts.join(">"), 120);
   }
   const CAPTCHA_BOX = '.g-recaptcha, .h-captcha, .cf-turnstile, [data-sitekey], #captcha, [class*="captcha" i]';
   function inCaptcha(t: Element | null): boolean { try { return !!(t && t.closest && t.closest(CAPTCHA_BOX)); } catch { return false; } }
@@ -415,12 +510,16 @@ function run(opts: TrackerOptions, w: Window & { parlox?: WindowParlox; dataLaye
     const rawCls = (t as Element & { className: unknown }).className;
     const cls = rawCls && typeof rawCls === "object" ? ((rawCls as SVGAnimatedString).baseVal || "") : (rawCls || "");
     let href = "";
-    try { const h = (t as HTMLAnchorElement).href; if (h) href = new URL(safePath(String(h))).pathname.slice(0, 80); } catch { /* unparsable */ }
+    try { const h = (t as HTMLAnchorElement).href; if (h) href = cut(new URL(safePath(String(h))).pathname, 80); } catch { /* unparsable */ }
+    let acc = accName(t), text = cleanName(labelOf(t));
+    // A control the merchant marked (data-plx-mask, data-plx-block) sends neither name.
+    if (marked(t, "[data-plx-mask], [data-plx-block]") && (text || acc.withheld || acc.name.trim())) { acc = WITHHELD; text = ""; }
     return {
-      text: mask(labelOf(t)).replace(/\s+/g, " ").trim().slice(0, 60),
-      tag: t.tagName.toLowerCase(), id: String(t.id || "").slice(0, 40),
-      cls: String(cls).split(/\s+/).filter(Boolean).slice(0, 3).join(" ").slice(0, 60), href, dom: domPath(t),
-      arole: accRole(t), aname: mask(accName(t)).replace(/\s+/g, " ").trim().slice(0, 80), attrs: ctrlAttrs(t),
+      text,
+      tag: t.tagName.toLowerCase(), id: cut(String(t.id || ""), 40),
+      cls: cut(String(cls).split(/\s+/).filter(Boolean).slice(0, 3).join(" "), 60), href, dom: domPath(t),
+      arole: accRole(t), ...(acc.withheld ? { aname_withheld: true } : { aname: cleanName(acc.name) }), ...(acc.source ? { aname_source: acc.source } : {}),
+      attrs: ctrlAttrs(t),
       captcha: inCaptcha(t) || undefined,
     };
   }
@@ -512,15 +611,15 @@ function run(opts: TrackerOptions, w: Window & { parlox?: WindowParlox; dataLaye
   // ── Commerce events ──
   const COMMERCE: Record<string, 1> = { view_item: 1, add_to_cart: 1, remove_from_cart: 1, view_cart: 1, begin_checkout: 1, checkout_step: 1, add_shipping_info: 1, add_payment_info: 1, purchase: 1, search: 1 };
   function commerce(name: string, props: CommerceProps | undefined, via: string) {
-    if (!COMMERCE[name]) return;
+    if (!Object.prototype.hasOwnProperty.call(COMMERCE, name)) return;
     const p: Record<string, unknown> = { via };
     if (props && typeof props === "object") {
       if (typeof props.value === "number" && isFinite(props.value)) p.value = props.value;
-      if (typeof props.currency === "string") p.currency = props.currency.slice(0, 3).toUpperCase();
+      if (typeof props.currency === "string") p.currency = cut(props.currency, 3).toUpperCase();
       if (typeof props.items === "number" && isFinite(props.items)) p.items = Math.round(props.items);
-      if (props.order_id != null) p.order_id = String(props.order_id).slice(0, 64);
-      if (props.item_id != null) p.item_id = String(props.item_id).slice(0, 64);
-      if (typeof props.step === "string") p.step = props.step.slice(0, 20);
+      if (props.order_id != null) p.order_id = cut(String(props.order_id), 64);
+      if (props.item_id != null) p.item_id = cut(String(props.item_id), 64);
+      if (typeof props.step === "string") p.step = cut(props.step, 20);
     }
     add(name, p);
     if (page) page.lastCommerceT = Date.now();
@@ -576,7 +675,7 @@ function run(opts: TrackerOptions, w: Window & { parlox?: WindowParlox; dataLaye
     if (typeof msg.event === "string") { name = msg.event; params = msg.ecommerce || {}; }
     else if (msg.length >= 2 && msg[0] === "event" && typeof msg[1] === "string") { name = msg[1]; params = msg[2] || {}; }
     else return;
-    if (!COMMERCE[name] || typeof params !== "object") return;
+    if (!Object.prototype.hasOwnProperty.call(COMMERCE, name) || typeof params !== "object") return;
     const items = Array.isArray(params.items) ? params.items : null;
     commerce(name, {
       value: typeof params.value === "string" ? parseFloat(params.value) : params.value, currency: params.currency,
@@ -605,10 +704,10 @@ function run(opts: TrackerOptions, w: Window & { parlox?: WindowParlox; dataLaye
   try { watchDataLayer(); } catch { /* a data layer we cannot wrap */ }
 
   function fieldInfo(f: HTMLInputElement): Record<string, unknown> {
-    return { name: String(f.name || f.id || "").slice(0, 40), type: String(f.type || f.tagName || "").toLowerCase().slice(0, 20), ac: String(f.getAttribute("autocomplete") || "").slice(0, 30) };
+    return { name: cut(String(f.name || f.id || ""), 40), type: cut(String(f.type || f.tagName || "").toLowerCase(), 20), ac: cut(String(f.getAttribute("autocomplete") || ""), 30) };
   }
   function isField(f: any): f is HTMLInputElement { return !!(f && f.matches && f.matches("input, select, textarea") && !/^(hidden|submit|button|image|reset)$/.test(f.type || "")); }
-  function fieldKey(f: HTMLInputElement): string { return String(f.name || f.id || f.type || "").slice(0, 40); }
+  function fieldKey(f: HTMLInputElement): string { return cut(String(f.name || f.id || f.type || ""), 40); }
   function fieldStat(f: HTMLInputElement): Field | null {
     if (!page) return null;
     const k = fieldKey(f);
@@ -642,7 +741,7 @@ function run(opts: TrackerOptions, w: Window & { parlox?: WindowParlox; dataLaye
     if (page) { page.lastActT = Date.now(); page.lastAct = "submit"; }
     const f = e.target as HTMLFormElement; let action = "";
     try { action = new URL(safePath(f.getAttribute("action") || location.href)).pathname; } catch { /* unparsable */ }
-    add("submit", { form: String((f.getAttribute && (f.getAttribute("id") || f.getAttribute("name"))) || "").slice(0, 40), action: action.slice(0, 80) });
+    add("submit", { form: cut(String((f.getAttribute && (f.getAttribute("id") || f.getAttribute("name"))) || ""), 40), action: cut(action, 80) });
   }, { passive: true, capture: true });
   on(w, "invalid", (e: Event) => {
     const f = e.target; if (!isField(f)) return;
