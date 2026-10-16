@@ -1,4 +1,4 @@
-import { addViteInit, removeViteInit, viteInitSnippet } from "../edits/vite-init.js";
+import { addViteInit, REMOVE_INIT_SNIPPET, removeViteInit, viteInitSnippet } from "../edits/vite-init.js";
 import { DetectError, GUIDE, hasDep } from "../workspace.js";
 import type { Integration } from "./types.js";
 import { viteSpa } from "./vite-spa.js";
@@ -9,8 +9,6 @@ import { viteSpa } from "./vite-spa.js";
 // (vite-spa.ts). A folder that also depends on react is not taken as a Vue app: the wizard cannot tell which framework
 // renders it, so this integration declines it, and the refusal is said beside Vite React's install (apps.ts,
 // detectFolder), which edits only a createRoot(…).render(…) call.
-
-const REMOVE_SNIPPET = 'Remove `import { init } from "@parlox/browser"` and the init({ publicKey: … }) call by hand.';
 
 // What builds on Vue and Vite but is not a single-page app with an index.html entry: frameworks with their own server
 // and routing (each needs its own server adapter, not covered yet), and site generators with their own entry and
@@ -59,7 +57,7 @@ export const viteVue: Integration = viteSpa({
       return { ok: false, reason: `@parlox/browser is already in package.json, but ${file} does not start it the way the wizard writes it, so Parlox may already start elsewhere in this app with options of its own (consent: "required"): a second init() here would run first, and those options would not apply. If nothing starts Parlox yet, add the lines below.`, snippet: viteInitSnippet(publicKey) };
     },
     remove: removeViteInit,
-    removeSnippet: REMOVE_SNIPPET,
+    removeSnippet: REMOVE_INIT_SNIPPET,
     what: "Parlox's init() call",
   },
 });

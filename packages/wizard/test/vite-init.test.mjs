@@ -153,7 +153,7 @@ test("a file the wizard cannot read, or cannot edit around exactly, is a snippet
   const asi = "import { createApp } from 'vue'\n(window as any).boot = true\ncreateApp({}).mount('#app')\n";
   const a = addViteInit(asi, "src/main.ts", PK);
   assert.equal(a.ok, false);
-  assert.match(a.reason, /would run into the line after it/);
+  assert.match(a.reason, /would run on into the code after it/);
   for (const next of ["[1, 2].forEach(() => {})", "`x`.length"]) assert.equal(addViteInit(`import { createApp } from 'vue'\n${next}\n`, "src/main.js", PK).ok, false, next);
   // The same file with semicolons is fine.
   assert.equal(addViteInit("import { createApp } from 'vue';\n(window).boot = true;\n", "src/main.js", PK).changed, true);
@@ -204,4 +204,38 @@ test("uninstall: exactly the wizard's two lines; a lone import goes too; anythin
   const theirs = `function init(o) { return o }\n${orphan}`;
   assert.deepEqual(removeViteInit(theirs, "src/main.ts"), { ok: true, code: theirs, changed: false });
   assert.deepEqual(removeViteInit("import { createApp } from 'vue'\ncreateApp(\n", "src/main.ts").ok, false);
+});
+
+const RUN_ON = "A line the wizard would add would run on into the code after it: this file leaves out semicolons, and the next line starts with a character that continues the statement before it (such as (, [, `, /, + or -). Add the two lines by hand, ending the call with a semicolon.";
+
+test("semicolons: left out only where the file's first import and most of its statements leave them out; a mixed file gets them, in either order", () => {
+  for (const code of [
+    "import { createApp } from 'vue';\nimport App from './App.vue'\n(window).x = 1\n",
+    "import { createApp } from 'vue'\nimport App from './App.vue';\n(window).x = 1;\n",
+  ]) {
+    const r = addViteInit(code, "src/main.js", PK);
+    assert.equal(r.ok && r.changed, true, code);
+    assert.match(r.code, new RegExp(`import \\{ init \\} from '@parlox/browser';\\ninit\\(\\{ publicKey: '${PK}' \\}\\);\\n\\(window\\)`), code);
+    assert.equal(removeViteInit(r.code, "src/main.js").code, code, code);
+  }
+});
+
+test("without semicolons, a next line that would continue the call is refused with the reason and what to do instead", () => {
+  for (const next of ["(window as any).boot = true", "[1, 2].forEach(() => {})", "`x`.length", "-1", "/x/.test('x') && start()"]) {
+    const file = next.includes(" as ") ? "src/main.ts" : "src/main.js";
+    const r = addViteInit(`import { createApp } from 'vue'\n${next}\n`, file, PK);
+    assert.deepEqual([r.ok, r.reason], [false, RUN_ON], next);
+  }
+});
+
+test("uninstall: lines the developer moved between a line without a semicolon and one that would continue it are left to the developer, since taking them out would join the two", () => {
+  for (const [label, code] of [
+    ["the call before a ( line", `import { init } from '@parlox/browser'\nconst a = b\ninit({ publicKey: '${PK}' });\n(c)()\n`],
+    ["the call before a [ line", `import { init } from '@parlox/browser'\nconst a = b\ninit({ publicKey: '${PK}' });\n[1].forEach(f)\n`],
+    ["a lone import before a ( line", "const a = b\nimport { init } from '@parlox/browser';\n(c)()\n"],
+  ]) {
+    const r = removeViteInit(code, "src/main.js");
+    assert.equal(r.ok, false, label);
+    assert.equal(r.reason, "Taking Parlox's lines out here would join the code around them into one statement (the file leaves out semicolons, and the line after them starts with a character that continues the line before them); remove them by hand.", label);
+  }
 });

@@ -4,11 +4,12 @@ import { addImportLine, dominantSemicolon, identifierUse, insertLineAfter, parse
 
 // The browser part of a Vite app whose framework needs no Parlox component (Vite Vue): `init({ publicKey })` from
 // @parlox/browser, the SDK's own usage outside React (its README: `import { init, track } from "@parlox/browser";
-// init({ publicKey: "pk_..." });`), as a statement of its own right after the entry's imports. Imports are evaluated
-// first, so it runs before createApp(App).mount(…); the tracker starts once per page and follows single-page navigation
-// (history.pushState, which Vue Router uses). What is inserted: the fixed import line after the last top-level import
-// and the fixed call on the line after it, the validated key the only variable, in the file's own quotes and
-// semicolons (edits/splice.ts, styleOf). The edit is made only when removeViteInit gives back the original bytes.
+// init({ publicKey: "pk_..." });`), as a statement of its own right after the entry's last import, so it runs before
+// the code below it (in create-vite's entry, createApp(App).mount(…)); the tracker starts once per page and follows
+// single-page navigation (history.pushState, which Vue Router uses). What is inserted: the fixed import line after the
+// last top-level import and the fixed call on the line after it, the validated key the only variable, in the file's own
+// quotes (edits/splice.ts, styleOf) and semicolons: left out only where the file's first import and most of its
+// statements leave them out. The edit is made only when removeViteInit gives back the original bytes.
 //
 // Already installed means the wizard's import (`import { init } from "@parlox/browser"`, not renamed) and one top-level
 // call of it with the key written as a string. A file that loads @parlox/browser in any other way is left to the
@@ -21,7 +22,13 @@ const importLine = (q: string, semi: string) => `import { ${NAME} } from ${q}${S
 const callLine = (pk: string, q: string, semi: string) => `${NAME}({ publicKey: ${q}${pk}${q} })${semi}`;
 /** The paste-in snippet for a Vite entry the wizard does not edit. */
 export const viteInitSnippet = (pk: string) => `${importLine('"', ";")}\n${callLine(pk, '"', ";")}`;
-const REMOVE_SNIPPET = `Remove \`${importLine('"', "")}\` and the init({ publicKey: … }) call by hand.`;
+/** The step by hand that takes the browser part out. */
+export const REMOVE_INIT_SNIPPET = `Remove \`${importLine('"', "")}\` and the init({ publicKey: … }) call by hand.`;
+// Without semicolons, a line that starts with ( [ ` / + or - continues the statement before it.
+const RUN_ON = "A line the wizard would add would run on into the code after it: this file leaves out semicolons, and the next line starts with a character that continues the statement before it (such as (, [, `, /, + or -). Add the two lines by hand, ending the call with a semicolon.";
+const JOINED = "Taking Parlox's lines out here would join the code around them into one statement (the file leaves out semicolons, and the line after them starts with a character that continues the line before them); remove them by hand.";
+/** The source text of each top-level statement but `drop`, in order. */
+const statements = (ast: Ast, code: string, drop: Node[] = []): string[] => ast.program.body.filter((s) => !drop.includes(s)).map((s) => code.slice(s.start, s.end));
 const lineOf = (n: Node): number => n.loc?.start?.line ?? 0;
 
 /** The wizard's import: `import { init } from "@parlox/browser"`, one name, not renamed, not a type. */
@@ -65,9 +72,12 @@ export function addViteInit(code: string, file: string, publicKey: string): Spli
   // Not scope-aware (edits/splice.ts): any binding of the name would make the call refer to it, not to the import.
   const local = identifierUse(ast, NAME);
   if (local) return refuse(`This file uses the name init on line ${lineOf(local)}, so the wizard's import of init could not be told apart from it. ${rename}`);
-  // The quote and semicolon of the file's first import; without one, those most of the file uses.
+  // The quote of the file's first import (without one, the one most of its strings use). Semicolons are left out only
+  // where that import and most of the file's statements leave them out: a mixed file gets them, which no next line
+  // can run on from.
   const style = styleOf(code, ast);
-  const semi = ast.program.body.some((s) => s.type === "ImportDeclaration") ? style.semi : dominantSemicolon(code, ast);
+  const first = ast.program.body.some((s) => s.type === "ImportDeclaration") ? style.semi : "";
+  const semi = first === "" && dominantSemicolon(code, ast) === "" ? "" : ";";
   const imp = importLine(style.q, semi), call = callLine(publicKey, style.q, semi);
   let out: string;
   try {
@@ -80,13 +90,13 @@ export function addViteInit(code: string, file: string, publicKey: string): Spli
     if (err instanceof SpliceError) return refuse(err.message);
     throw err;
   }
-  // Without semicolons, a line that starts with ( [ or ` continues the one before it: each added line must be a
-  // statement of its own, exactly as written.
+  // Without semicolons, the next line may continue the call: each added line must be a statement of its own, exactly
+  // as written (a file that no longer parses, as with a regular expression on the next line, is the same).
   const after = parseCode(out, file);
-  if (!after) return refuse("The file would not parse with Parlox added.");
+  if (!after) return refuse(semi === "" ? RUN_ON : "The file would not parse with Parlox added.");
   const own = after.program.body.filter(isOwnImport);
   const calls = initCalls(after);
-  if (own.length !== 1 || out.slice(own[0].start, own[0].end) !== imp || calls.length !== 1 || out.slice(calls[0].start, calls[0].end) !== call) return refuse("A line the wizard would add would run into the line after it (the file leaves out semicolons, and that line starts with a bracket or a backtick).");
+  if (own.length !== 1 || out.slice(own[0].start, own[0].end) !== imp || calls.length !== 1 || out.slice(calls[0].start, calls[0].end) !== call) return refuse(RUN_ON);
   const back = removeViteInit(out, file);
   if (!back.ok || back.code !== code) return refuse("The wizard could not add it in a way it can take out again exactly.");
   return { ok: true, code: out, changed: true };
@@ -96,7 +106,7 @@ export function addViteInit(code: string, file: string, publicKey: string): Spli
  * them. A lone import of the wizard's (its call removed by hand) goes too: once the package is removed, it would break
  * the build. Any other use of @parlox/browser left in the file is named in `warning`. */
 export function removeViteInit(code: string, file: string): SpliceEdit {
-  const manual = (reason: string): SpliceEdit => ({ ok: false, reason, snippet: REMOVE_SNIPPET });
+  const manual = (reason: string): SpliceEdit => ({ ok: false, reason, snippet: REMOVE_INIT_SNIPPET });
   const ast = parseCode(code, file);
   if (!ast) return manual("The wizard could not read this file.");
   try {
@@ -112,6 +122,10 @@ export function removeViteInit(code: string, file: string): SpliceEdit {
     const after = parseCode(out, file);
     if (!after) return manual("The file would not parse without Parlox.");
     out = removeImportLine(out, after, SOURCE, [NAME]);
+    // Lines the developer moved may sit between a line without a semicolon and one that continues it: every other
+    // statement must come out as it was.
+    const left = parseCode(out, file);
+    if (!left || statements(left, out).join("\0") !== statements(ast, code, [ast.program.body.find(isOwnImport)!, ...calls]).join("\0")) return manual(JOINED);
     return removedEdit(code, out, file);
   } catch (err) {
     if (err instanceof SpliceError) return manual(err.message);
