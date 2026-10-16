@@ -57,15 +57,20 @@ export interface Scan {
 }
 
 // Which integration's part wins when two match one folder: the browser part from the frontend's own entry, the server
-// part from the server framework. Next.js is always alone (its middleware is its server part).
+// part from the server framework. Next.js is always alone (its middleware is its server part). A browser part the
+// wizard can put in a file comes before one that is only a step by hand: a Vite build with no index.html beside
+// Express's own pages (Vite's backend integration) gets its tag in those pages.
 const BROWSER_ORDER: IntegrationId[] = ["nextjs", "vite-react", "vite-vue", "hono", "express"];
 const SERVER_ORDER: IntegrationId[] = ["nextjs", "express", "hono", "vite-react", "vite-vue"];
 const pick = (found: Detection[], order: IntegrationId[], part: "browser" | "server"): Detection | null => {
-  for (const id of order) {
-    const d = found.find((x) => x.integration === id && x.parts[part]);
-    if (d) return d;
-  }
-  return null;
+  const first = (inFile: boolean): Detection | null => {
+    for (const id of order) {
+      const d = found.find((x) => x.integration === id && x.parts[part] && (!inFile || x.parts[part]!.file !== null));
+      if (d) return d;
+    }
+    return null;
+  };
+  return (part === "browser" ? first(true) : null) ?? first(false);
 };
 const relOf = (base: string, dir: string) => relative(base, dir).split(sep).join("/") || ".";
 /** A folder in a list shown to the developer: the base itself is "./", as describeUnit writes it. */
@@ -145,9 +150,10 @@ export function unitOf(dir: string, root: string, base: string, found: Detection
   const exposure = named ?? (check ? secretExposureOf(found) ?? check.exposure : null);
   const browser = pick(found, BROWSER_ORDER, "browser");
   // A withheld Express server that serves this folder's Vite single-page app build: the ownership file can prove the
-  // domain.
-  const served = exposure && server!.integration === "express" && browser && isViteSpa(browser.integration) ? viteVerifyServed(dir, server!.data as ExpressData, browser.data as ViteData) : null;
-  const vite = browser?.data as ViteData | undefined;
+  // domain (planned by the Vite app, whichever part gives the browser part: planUnit).
+  const viteApp = found.find((d) => isViteSpa(d.integration));
+  const served = exposure && server!.integration === "express" && viteApp ? viteVerifyServed(dir, server!.data as ExpressData, viteApp.data as ViteData) : null;
+  const vite = viteApp?.data as ViteData | undefined;
   const verifyNote = served ? [`${labelOf(server!)}: the ownership file goes in ${vite!.publicDir}/.well-known/parlox-verify: Express 4 serves ${served.folder}/ (express.static in ${served.serverFile})${served.folder === vite!.publicDir ? "." : ", where Vite copies the public folder when it builds."}`] : [];
   // The host the run will detect for this app (cli.ts), for the wording only.
   // Beside the dashboard note: each Yarn release file the guard allowed by its location, not by reading it.
@@ -293,7 +299,11 @@ export interface UnitInput { publicKey: string; verifyToken: string; host: Host;
  * integration reads the first one's changes, so a file both touch is changed once, in order. */
 export function planUnit(u: AppUnit, input: UnitInput, io: PlanIo): Plan {
   const steps: Array<{ d: Detection; parts: { browser: boolean; server: boolean; verifyFile?: boolean } }> = [];
-  if (u.browser) steps.push({ d: u.browser, parts: { browser: true, server: u.server === u.browser, ...(u.withheld?.verifyFrom ? { verifyFile: true } : {}) } });
+  // The ownership file of a Vite app whose withheld Express server serves its build (unitOf): planned by that Vite app,
+  // with its browser part, or alone where Express's pages give the browser part.
+  const verifier = u.withheld?.verifyFrom ? u.detections.find((d) => isViteSpa(d.integration)) ?? null : null;
+  if (u.browser) steps.push({ d: u.browser, parts: { browser: true, server: u.server === u.browser, ...(verifier === u.browser ? { verifyFile: true } : {}) } });
+  if (verifier && verifier !== u.browser) steps.push({ d: verifier, parts: { browser: false, server: false, verifyFile: true } });
   if (u.server && u.server !== u.browser) steps.push({ d: u.server, parts: { browser: false, server: true } });
   let plan = emptyPlan();
   for (const s of steps) {

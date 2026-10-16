@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describeUnit, hostStepFor, planUnit, scanApps } from "../dist/apps.js";
 import { applyPlan } from "../dist/plan-core.js";
@@ -109,5 +109,54 @@ for (const fw of Object.keys(FRAMEWORKS)) {
     const again = planOf(installed);
     assert.deepEqual([again.changes, again.manual], [[], []]);
     assert.equal(again.warnings.includes(TAG_MANAGER), false);
+  });
+}
+
+// ---- Which part wins in a folder with Express pages and a Vite build: the one the wizard can add ----
+
+const GENERATED = join(import.meta.dirname, "fixtures", "generated");
+const UNPROVEN = "import { defineConfig } from 'vite'\nexport default defineConfig({\n  plugins: [{ name: 'mine', config: () => ({}) }],\n  build: { manifest: true, rollupOptions: { input: 'src/widgets.js' } },\n})\n";
+/** An Express server with its own pages that also builds widgets with Vite (Vite's backend integration: no
+ * index.html). */
+const expressWithWidgets = (fw, express = "^4.21.2") => fixture({
+  "package.json": JSON.stringify({ name: "shop", type: "module", scripts: { dev: "vite", build: "vite build", start: "node server.js" }, dependencies: { express, ejs: "^3.1.10", ...FRAMEWORKS[fw].deps }, devDependencies: { vite: "^8.3.0", ...FRAMEWORKS[fw].dev } }),
+  "package-lock.json": "{}", "render.yaml": "", "vite.config.js": UNPROVEN, "src/widgets.js": FRAMEWORKS[fw].main,
+  "server.js": "import express from 'express'\n\nconst app = express()\napp.use(express.static('dist'))\napp.set('view engine', 'ejs')\napp.get('/', (req, res) => res.render('index'))\napp.listen(3000)\n",
+  "views/index.ejs": "<!doctype html>\n<html>\n  <head>\n    <title>shop</title>\n  </head>\n  <body></body>\n</html>\n",
+});
+const RENDER = { id: "render", label: "Render", where: "", docs: null, vercelDir: null };
+
+for (const fw of Object.keys(FRAMEWORKS)) {
+  const { label } = FRAMEWORKS[fw];
+  test(`${label} without an index.html beside Express pages: the browser part goes in the pages, not a step by hand in the Vite entry; with an index.html the Vite entry still wins`, () => {
+    // express-generator's Pug app, with the framework and Vite added (no index.html).
+    const pug = fixture({});
+    cpSync(join(GENERATED, "express-pug"), pug, { recursive: true });
+    const pkg = JSON.parse(readFileSync(join(pug, "package.json"), "utf8"));
+    writeFileSync(join(pug, "package.json"), JSON.stringify({ ...pkg, dependencies: { ...pkg.dependencies, ...FRAMEWORKS[fw].deps }, devDependencies: { vite: "^8.3.0", ...FRAMEWORKS[fw].dev } }));
+    writeFileSync(join(pug, "render.yaml"), "");
+    const u = unitOf(pug);
+    assert.equal(u.browser.integration, "express");
+    assert.equal(describeUnit(u), `./ · ${label} + Express · browser and server parts`);
+    const plan = planUnit(u, { publicKey: PK, verifyToken: "vt_fake", host: RENDER }, { read: reader(pug), git });
+    assert.deepEqual(plan.changes.map((c) => c.path).sort(), ["app.js", "views/layout.pug"]);
+    assert.deepEqual(plan.manual, []);
+    // An index.html that names the entry: the Vite entry, as before.
+    const spaBeside = spa(fw, { pkg: { scripts: { start: "node server.js" }, dependencies: { express: "^5.1.0" } }, "server.js": "import express from 'express'\nconst app = express()\napp.use(express.static('dist'))\napp.listen(3000)\n", "views/index.ejs": "<html><head></head></html>\n" });
+    assert.equal(unitOf(spaBeside).browser.integration, `vite-${fw}`);
+  });
+
+  test(`${label} without an index.html beside a withheld Express 4 server that serves its build: the tag in the pages, and the ownership file still planned`, () => {
+    const dir = expressWithWidgets(fw);
+    const u = unitOf(dir);
+    assert.equal(u.server, null, "withheld: the Vite config is not proven safe");
+    assert.equal(u.browser.integration, "express");
+    assert.equal(u.withheld.verifyFrom, "dist");
+    const plan = planUnit(u, { publicKey: PK, verifyToken: "vt_fake", host: RENDER }, { read: reader(dir), git });
+    assert.deepEqual(plan.changes.map((c) => c.path).sort(), ["public/.well-known/parlox-verify", "views/index.ejs"]);
+    assert.ok(u.warnings.includes("Express: the ownership file goes in public/.well-known/parlox-verify: Express 4 serves dist/ (express.static in server.js), where Vite copies the public folder when it builds."), u.warnings.join("\n"));
+    // Express 5 does not serve files inside .well-known/: the tag only.
+    const five = expressWithWidgets(fw, "^5.1.0");
+    assert.deepEqual(planUnit(unitOf(five), { publicKey: PK, verifyToken: "vt_fake", host: RENDER }, { read: reader(five), git }).changes.map((c) => c.path), ["views/index.ejs"]);
   });
 }
