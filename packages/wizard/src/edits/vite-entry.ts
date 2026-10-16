@@ -1,4 +1,5 @@
 import { PUBLIC_KEY_RE } from "./browser.js";
+import { removedEdit } from "./browser-use.js";
 import { addImportLine, applySplices, endsLine, eolOf, identifierUse, indentAt, lineStart, parseCode, removeImportLine, SpliceError, startsLine, styleOf, topLevelNames, walk, type Ast, type Node, type SpliceEdit } from "./splice.js";
 
 // The Vite React browser part: <ParloxAnalytics publicKey="pk_…" /> rendered beside <App /> in the root render(…) call
@@ -65,28 +66,6 @@ const keyOf = (el: Node): string | null => {
   return a?.value?.type === "StringLiteral" ? a.value.value : null;
 };
 const lineOf = (n: Node): number => n.loc?.start?.line ?? 0;
-
-const BROWSER_PACKAGE = /^@parlox\/browser(\/|$)/;
-/** The first place the file loads @parlox/browser (an import or re-export, require(), import()). */
-function browserUse(ast: Ast | null): Node | null {
-  let found: Node | null = null;
-  const named = (lit: Node | undefined) => lit?.type === "StringLiteral" && BROWSER_PACKAGE.test(lit.value);
-  if (!ast) return null;
-  walk(ast.program, (n) => {
-    if (found) return;
-    if ((n.type === "ImportDeclaration" || n.type === "ExportNamedDeclaration" || n.type === "ExportAllDeclaration") && named(n.source)) found = n;
-    else if (n.type === "CallExpression" && ((n.callee.type === "Identifier" && n.callee.name === "require") || n.callee.type === "Import") && named(n.arguments[0])) found = n;
-    else if (n.type === "ImportExpression" && named(n.source)) found = n;
-  });
-  return found;
-}
-/** The edit's result, with a warning naming a line that still loads @parlox/browser: the uninstall removes the
- * package, so that line would break the build. */
-function removed(code: string, out: string, file: string): SpliceEdit {
-  const left = browserUse(parseCode(out, file));
-  const warning = left ? `Line ${lineOf(left)} still uses @parlox/browser, which the uninstall removes; remove that line by hand.` : undefined;
-  return { ok: true, code: out, changed: out !== code, ...(warning ? { warning } : {}) };
-}
 
 export function addViteEntry(code: string, file: string, publicKey: string): SpliceEdit {
   if (!PUBLIC_KEY_RE.test(publicKey)) throw new Error("Refusing to write an invalid public key");
@@ -159,7 +138,7 @@ export function removeViteEntry(code: string, file: string): SpliceEdit {
   try {
     const found = parloxElements(ast);
     if (!found.length) {
-      return removed(code, identifierUse(ast, NAME) ? code : removeImportLine(code, ast, SOURCE, [NAME]), file);
+      return removedEdit(code, identifierUse(ast, NAME) ? code : removeImportLine(code, ast, SOURCE, [NAME]), file);
     }
     if (found.length > 1) return manual(`${NAME} appears more than once here.`);
     const { el, parent } = found[0];
@@ -175,7 +154,7 @@ export function removeViteEntry(code: string, file: string): SpliceEdit {
     } else return manual("Parlox is added here in a way the wizard cannot safely remove (not a plain JSX child).");
     const ast2 = parseCode(out, file);
     if (!ast2) return manual("The file would not parse without Parlox.");
-    return removed(code, removeImportLine(out, ast2, SOURCE, [NAME]), file);
+    return removedEdit(code, removeImportLine(out, ast2, SOURCE, [NAME]), file);
   } catch (err) {
     if (err instanceof SpliceError) return manual(err.message);
     throw err;

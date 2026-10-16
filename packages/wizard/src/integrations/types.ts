@@ -8,10 +8,12 @@ import type { PackageManager } from "../workspace.js";
 // (plan), and exactly how to undo it (unplan). Structure as in PostHog's wizard (src/programs/frameworks/, a registry)
 // and Sentry's (one folder per framework): here with fixed syntax-tree edits shown as a diff first.
 
-export type IntegrationId = "nextjs" | "vite-react" | "express" | "hono";
+export type IntegrationId = "nextjs" | "vite-react" | "vite-vue" | "express" | "hono";
 
-/** Where a part goes: a file (null with manualReason: the developer pastes a snippet), and what kind of edit. */
-export interface PartTarget { file: string | null; kind: string; manualReason?: string }
+/** Where a part goes: a file (null with manualReason: the developer pastes a snippet), and what kind of edit.
+ * `noPage`: the part has no page of its own in this folder (a Vite build with no index.html, as in Vite's backend
+ * integration, where a server's pages are the pages): another integration's part in a file comes first (apps.ts). */
+export interface PartTarget { file: string | null; kind: string; manualReason?: string; noPage?: boolean }
 
 /** The local check: the address the dev server answers on and the command that starts it, or why there is none. */
 export type LocalCheck = { url: string; start: string } | { skip: string };

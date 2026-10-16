@@ -264,6 +264,35 @@ export interface FolderVite {
   yarnReleases?: string[];
 }
 
+const existsIn = (base: string) => (rel: string) => { try { lstatSync(join(base, rel)); return true; } catch { return false; } };
+const unknown = (what: string): SecretExposure => ({ why: `The wizard could not read ${what}, so it cannot prove that this folder's Vite build keeps the secret key out of the browser code.`, fix: BY_HAND, byHand: true });
+
+/** The Vite config guard (readViteSettings) on a folder `base` of the app at `dir`: why its build could bundle
+ * PARLOX_SECRET_KEY, or null; the Yarn release files it allowed by their location go in `yarnReleases`, relative to
+ * `dir`. Settings it fails to read are not proven safe. */
+function guardFolder(dir: string, root: string, base: string, yarnReleases: string[]): SecretExposure | null {
+  try {
+    const s = readViteSettings(readText(base), existsIn(base), appFolders(base, root));
+    const from = relative(dir, base).split(sep).join("/");
+    for (const r of s.yarnReleases ?? []) { const p = posix.normalize(posix.join(from || ".", r)); if (!yarnReleases.includes(p)) yarnReleases.push(p); }
+    return s.exposure;
+  } catch (err) { return unknown(`the Vite settings (${err instanceof Error ? err.message : String(err)})`); }
+}
+
+/** For a Vite single-page app, whose own build its own guard covers (vite-spa.ts): every Vite app below it (a client/
+ * with a Vite config, a package that declares Vite), each through the same guard as folderViteCheck's, and a folder
+ * below it the wizard could not look into. A key set where this app builds is there when those build too. */
+export function viteBuildsBelow(dir: string, root: string): { exposure: SecretExposure | null; yarnReleases?: string[] } {
+  const yarnReleases: string[] = [];
+  const below = viteFoldersBelow(dir);
+  for (const f of below.folders) {
+    const e = guardFolder(dir, root, join(dir, f.rel), yarnReleases);
+    if (e) return { exposure: within(`In ${f.rel}/: `, e) };
+  }
+  if (below.notChecked) return { exposure: { why: below.notChecked, fix: BY_HAND, byHand: true } };
+  return { exposure: null, ...(yarnReleases.length ? { yarnReleases } : {}) };
+}
+
 /** The Vite builds a server's key could reach, whatever their framework (Vue, Svelte, React Router…):
  * - a build or install command that drives Vite's JavaScript API (its settings are in code: unknown);
  * - this folder's own Vite build, when it runs one (runsViteBuild), or when a build or install command runs scripts
@@ -276,17 +305,8 @@ export interface FolderVite {
  * folder, one it cannot open, or the walk's cap outside git (a key is never set where the
  * answer is "not checked"). */
 export function folderViteCheck(dir: string, root: string): FolderVite {
-  const existsIn = (base: string) => (rel: string) => { try { lstatSync(join(base, rel)); return true; } catch { return false; } };
-  const unknown = (what: string): SecretExposure => ({ why: `The wizard could not read ${what}, so it cannot prove that this folder's Vite build keeps the secret key out of the browser code.`, fix: BY_HAND, byHand: true });
   const yarnReleases: string[] = [];
-  const guard = (base: string): SecretExposure | null => {
-    try {
-      const s = readViteSettings(readText(base), existsIn(base), appFolders(base, root));
-      const from = relative(dir, base).split(sep).join("/");
-      for (const r of s.yarnReleases ?? []) { const p = posix.normalize(posix.join(from || ".", r)); if (!yarnReleases.includes(p)) yarnReleases.push(p); }
-      return s.exposure;
-    } catch (err) { return unknown(`the Vite settings (${err instanceof Error ? err.message : String(err)})`); }
-  };
+  const guard = (base: string): SecretExposure | null => guardFolder(dir, root, base, yarnReleases);
   const read = readText(dir);
   let pkg: Record<string, any>;
   try { pkg = readJson(join(dir, "package.json")); } catch { return { exposure: unknown("package.json"), seen: true }; }

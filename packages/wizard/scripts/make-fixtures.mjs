@@ -1,7 +1,9 @@
 // Regenerates test/fixtures/generated/ from the official generators, at pinned versions (Sentry's
 // e2e-tests/test-applications pattern). Needs the network. Run it by hand when a generator version is bumped, review
 // the diff, commit it; nothing here runs in CI. No dependencies are installed (create-vite --no-immediate, create-hono
-// answered "n"), so no node_modules is committed.
+// answered "n"), so no node_modules is committed. With fixture names as arguments
+// (`node scripts/make-fixtures.mjs vite-vue vite-vue-ts`), only those are generated: a new fixture is added without
+// regenerating the others.
 import { spawnSync } from "node:child_process";
 import { cpSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -13,6 +15,8 @@ const VITE = "create-vite@9.2.1", EXPRESS = "express-generator@4.16.1", HONO = "
 const FIXTURES = [
   ["vite-react-ts", [VITE, "vite-react-ts", "--template", "react-ts", "--no-interactive", "--no-immediate"]],
   ["vite-react", [VITE, "vite-react", "--template", "react", "--no-interactive", "--no-immediate"]],
+  ["vite-vue-ts", [VITE, "vite-vue-ts", "--template", "vue-ts", "--no-interactive", "--no-immediate"]],
+  ["vite-vue", [VITE, "vite-vue", "--template", "vue", "--no-interactive", "--no-immediate"]],
   ["express-pug", [EXPRESS, "--view=pug", "express-pug"]],
   ["express-ejs", [EXPRESS, "--view=ejs", "express-ejs"]],
   ["express-hbs", [EXPRESS, "--view=hbs", "express-hbs"]],
@@ -21,8 +25,11 @@ const FIXTURES = [
   ...["nodejs", "bun", "cloudflare-workers", "cloudflare-pages", "vercel", "aws-lambda"].map((t) => [`hono-${t}`, [HONO, `hono-${t}`, "--template", t, "--pm", "npm"]]),
 ];
 
+const wanted = process.argv.slice(2);
+const unknown = wanted.filter((w) => !FIXTURES.some(([name]) => name === w));
+if (unknown.length) { console.error(`no such fixture: ${unknown.join(", ")}`); process.exit(1); }
 const work = mkdtempSync(join(tmpdir(), "parlox-fixtures-"));
-for (const [name, args] of FIXTURES) {
+for (const [name, args] of FIXTURES.filter(([name]) => !wanted.length || wanted.includes(name))) {
   // create-hono asks whether to install dependencies; the answer is no.
   const r = spawnSync(npx, ["-y", ...args], { cwd: work, input: "n\n", encoding: "utf8", shell: process.platform === "win32" });
   if (r.status !== 0) { console.error(`${name}: ${r.stderr}`); process.exit(1); }

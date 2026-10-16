@@ -52,7 +52,7 @@ const omit = (files, name) => Object.fromEntries(Object.entries(files).filter(([
 const input = (dir) => ({ publicKey: PK, verifyToken: "vt", host: { id: "unknown" }, versions: { browser: "1.0.3", server: SERVER_VERSION }, parts: { browser: true, server: true }, read: reader(dir), git });
 
 test("registered last, after Express", () => {
-  assert.deepEqual(INTEGRATIONS.map((i) => i.id), ["nextjs", "vite-react", "express", "hono"]);
+  assert.deepEqual(INTEGRATIONS.map((i) => i.id), ["nextjs", "vite-react", "vite-vue", "express", "hono"]);
 });
 
 test("every covered create-hono template: its target, its app file, the use line right after `new Hono()`; uninstall gives back the bytes", () => {

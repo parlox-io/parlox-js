@@ -15,7 +15,7 @@ import { DetectError, GUIDE, hasDep, installedMajor, packageManagerOf, readJson,
 import { serverPackageKept } from "../sdk-use.js";
 import { planUseLine, shutdownNote, tryRead } from "./server-part.js";
 import type { Integration, PlanInput } from "./types.js";
-import { viteFoldersBelow } from "./vite-react.js";
+import { viteFoldersBelow } from "./vite-folders.js";
 
 // Express 4 and 5. The server part: `app.use(parlox())` right after `const app = express()` in the file
 // the app runs. NestJS (which uses Express underneath) is declined: its app is created by NestFactory, not express().
@@ -36,7 +36,8 @@ export interface ExpressData {
   ownReport: OwnReport | null;
   /** What the scan for that code did not read (the app is larger than its caps), or null. */
   ownReportNotChecked: string | null;
-  /** Express is only in devDependencies: beside a Vite React app it is a dev helper, not the server (apps.ts). */
+  /** Express is only in devDependencies: beside a Vite single-page app (React or Vue) it is a dev helper, not the
+   * server (apps.ts). */
   devOnly: boolean;
   /** The pages it serves (views, static HTML) for the browser part, or null: no single app in the server file. */
   pages: ExpressPages | null;
