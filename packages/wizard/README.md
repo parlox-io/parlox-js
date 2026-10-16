@@ -25,28 +25,30 @@ In a Vite Vue app the two lines go right after the entry's last import, so they 
 create-vite's entry, `createApp(App).mount(…)`); an entry that already uses the name `init` gets them to paste instead.
 
 Parlox starts once per page, with the options of whichever start runs first, so the wizard adds no second start where
-it can see one, and gives you the lines to paste instead:
-- Vite React and Vite Vue: the `index.html` Vite uses already has a Parlox script tag, or a module that loads
-  `@parlox/browser` (not counting HTML comments);
-- Vite Vue also: the entry already loads `@parlox/browser` in another way, or the app's `package.json` already lists it
-  (Parlox may start in another of its files).
+it can see one:
+- Vite React and Vite Vue: where the `index.html` Vite uses already has a Parlox script tag, or a module that loads
+  `@parlox/browser` (not counting HTML comments), there is nothing to add, and the review says which line starts it;
+- Vite Vue also: where the entry already loads `@parlox/browser` in another way, or the app's `package.json` already
+  lists it (Parlox may start in another of its files), you get the two lines to paste, to use only if nothing starts
+  Parlox yet.
 
 A start the wizard cannot see is not checked: a tag your tag manager (Google Tag Manager, say) loads, which the review
 and the report remind you of, and, in Vite React, a start in another file of the app.
 
 A folder with a Vite frontend served by its own Express or Hono server gets both: the component (React) or the `init`
-lines (Vue) in the Vite entry, the middleware in the server file. Hosts usually give the build the same variables as
-the server, so the server part and its key are added only when the wizard can prove that no Vite build in the folder
-could put the key into the browser code; otherwise the app gets the browser part only, and the report says why. A `$`
-in a `.env` file that Vite loads when it builds, or that Bun loads when Bun runs the build, also withholds the key:
-both expand `$NAME` there from the build's environment, so the file could copy the key into a `VITE_` variable, which
-Vite puts in the browser code. The same check runs on every host, Cloudflare Workers included: whether an app deploys
-only as a Worker, whose runtime secrets the build does not see, cannot be read from its files (Workers Builds and other
-Git-connected hosts leave no trace in the repository). For a Hono app on Workers the host hand-off also says to add the
-key as a runtime secret (Settings → Variables & Secrets), not as a build variable. The wizard takes a Hono app with
-wrangler's config to run on Workers only when nothing says otherwise: no other host's file or link (a Vercel link,
-`vercel.json` or `now.json`, `netlify.toml` or a `netlify/` folder, `fly.toml`, `render.yaml`, `railway.*`, a
-`Dockerfile` or `Dockerfile.<name>`, a `Containerfile`, a Compose file, a `Procfile`, `nixpacks.toml`,
+lines (Vue) in the Vite entry, the middleware in the server file. A Vite build with no `index.html` beside the server's
+own pages (Vite's backend integration) gets the tag in those pages instead. Hosts usually give the build the same
+variables as the server, so the server part and its key are added only when the wizard can prove that no Vite build in
+the folder could put the key into the browser code; otherwise the app gets the browser part only, and the report says
+why. A `$` in a `.env` file that Vite loads when it builds, or that Bun loads when Bun runs the build, also withholds
+the key: both expand `$NAME` there from the build's environment, so the file could copy the key into a `VITE_`
+variable, which Vite puts in the browser code. The same check runs on every host, Cloudflare Workers included: whether
+an app deploys only as a Worker, whose runtime secrets the build does not see, cannot be read from its files (Workers
+Builds and other Git-connected hosts leave no trace in the repository). For a Hono app on Workers the host hand-off
+also says to add the key as a runtime secret (Settings → Variables & Secrets), not as a build variable. The wizard
+takes a Hono app with wrangler's config to run on Workers only when nothing says otherwise: no other host's file or
+link (a Vercel link, `vercel.json` or `now.json`, `netlify.toml` or a `netlify/` folder, `fly.toml`, `render.yaml`,
+`railway.*`, a `Dockerfile` or `Dockerfile.<name>`, a `Containerfile`, a Compose file, a `Procfile`, `nixpacks.toml`,
 `serverless.yml`, `app.yaml`) in the app folder or any folder above it up to the top of the repository, and no other
 runtime in its dependencies, its scripts or its code (`@hono/node-server`, `@hono/aws-lambda`, `hono/vercel`,
 `hono/aws-lambda`, `hono/bun`, `hono/deno`, `hono/lambda-edge`, `hono/netlify`, `srvx`, `@vercel/node`, the `vercel`

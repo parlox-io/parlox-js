@@ -57,20 +57,17 @@ export interface Scan {
 }
 
 // Which integration's part wins when two match one folder: the browser part from the frontend's own entry, the server
-// part from the server framework. Next.js is always alone (its middleware is its server part). A browser part the
-// wizard can put in a file comes before one that is only a step by hand: a Vite build with no index.html beside
-// Express's own pages (Vite's backend integration) gets its tag in those pages.
+// part from the server framework. Next.js is always alone (its middleware is its server part). A Vite app with no
+// index.html (Vite's backend integration: the server's own pages are the pages) gives its browser part to an
+// integration that can put it in a file, a server's pages; an index.html whose entry the wizard cannot find keeps
+// the Vite app's step by hand, and its reason.
 const BROWSER_ORDER: IntegrationId[] = ["nextjs", "vite-react", "vite-vue", "hono", "express"];
 const SERVER_ORDER: IntegrationId[] = ["nextjs", "express", "hono", "vite-react", "vite-vue"];
 const pick = (found: Detection[], order: IntegrationId[], part: "browser" | "server"): Detection | null => {
-  const first = (inFile: boolean): Detection | null => {
-    for (const id of order) {
-      const d = found.find((x) => x.integration === id && x.parts[part] && (!inFile || x.parts[part]!.file !== null));
-      if (d) return d;
-    }
-    return null;
-  };
-  return (part === "browser" ? first(true) : null) ?? first(false);
+  const ranked = order.flatMap((id) => found.filter((x) => x.integration === id && x.parts[part]));
+  const first = ranked[0] ?? null;
+  if (part === "browser" && first?.parts.browser?.noPage) return ranked.find((d) => d.parts.browser!.file !== null) ?? first;
+  return first;
 };
 const relOf = (base: string, dir: string) => relative(base, dir).split(sep).join("/") || ".";
 /** A folder in a list shown to the developer: the base itself is "./", as describeUnit writes it. */

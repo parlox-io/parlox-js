@@ -107,7 +107,10 @@ const settingsNote = (file: string) => `The wizard read the Build Command and th
 const LOCAL_SKIP = "the Vercel middleware runs only on Vercel; check it after you deploy";
 // Parlox keeps the first start of a page (packages/browser: init() returns the running tracker; the tag starts it
 // once). A second start the wizard adds could run first and set aside the first one's options.
-const pageStartReason = (s: PageStart, entry: string) => `${s.file} already starts Parlox on line ${s.line} (a Parlox script tag, or a module that loads @parlox/browser), so the wizard adds no second start to ${entry}: Parlox keeps the first start of a page, and one in ${entry} could run first and set aside that start's options (data-consent="required", say). If that is this site's own start, nothing more is needed; to start Parlox from ${entry} instead, remove it and run the wizard again.`;
+const pageStartReason = (s: PageStart) => `${s.file} already starts Parlox on line ${s.line} (a Parlox script tag, or a module that loads @parlox/browser), so the wizard adds no second start: Parlox keeps the first start of a page, and another one could run first and set aside that start's options (data-consent="required", say). If that is this site's own start, nothing more is needed; to start Parlox from the app's code instead, remove it and run the wizard again.`;
+const nothingToAdd = (s: PageStart) => `Nothing to add while ${s.file} starts Parlox (line ${s.line}).`;
+// The wizard's start already in the entry, and a start in the page added since.
+const twiceNote = (s: PageStart, entry: string) => `${s.file} also starts Parlox, on line ${s.line}, beside the wizard's start in ${entry}: the page starts Parlox twice, and only the first start's options apply (a data-consent="required" there could be set aside). Keep one of the two.`;
 // A start the wizard cannot see in the app's files: a tag a tag manager loads.
 const TAG_MANAGER_NOTE = "Parlox starts once per page, with the options of whichever start runs first. If a tag manager (Google Tag Manager, say) also loads Parlox's tag on this site, the wizard cannot see it in your files: keep one of the two, since a start there with data-consent=\"required\" could otherwise be set aside.";
 
@@ -167,11 +170,11 @@ function pageStartOf(file: string, html: string): PageStart | null {
 
 /** The entry file from Vite's index.html (in Vite's root), or why there is none; and where that page already starts
  * Parlox. */
-function entryOf(read: (rel: string) => string | null, s: ViteSettings): { entry: string | null; reason: string | null; start: PageStart | null } {
+function entryOf(read: (rel: string) => string | null, s: ViteSettings): { entry: string | null; reason: string | null; start: PageStart | null; noPage?: boolean } {
   if (s.root === null) return { entry: null, reason: `The wizard cannot read Vite's root from ${s.file} (it is computed in code, or the config is not a plain object), so it cannot tell which index.html Vite uses.`, start: null };
   const html = s.root === "." ? "index.html" : `${s.root}/index.html`;
   const text = read(html);
-  if (text === null) return { entry: null, reason: s.root === "." ? "No index.html in this folder." : `No index.html in ${s.root} (Vite's root, set in ${s.file}).`, start: null };
+  if (text === null) return { entry: null, reason: s.root === "." ? "No index.html in this folder." : `No index.html in ${s.root} (Vite's root, set in ${s.file}).`, start: null, noPage: true };
   const start = pageStartOf(html, text);
   const src = moduleEntry(text);
   if (!src) return { entry: null, reason: `${html} has no single <script type="module" src="…"> of the app's own.`, start };
@@ -202,7 +205,7 @@ export function viteSpa(fw: ViteFramework): Integration {
       const named = settings.exposure ? null : folderViteNamesSecretKey(dir);
       const below = settings.exposure || named ? null : viteBuildsBelow(dir, root);
       const yarnReleases = [...new Set([...(settings.yarnReleases ?? []), ...(below?.yarnReleases ?? [])])];
-      const { entry, reason, start } = entryOf(read, settings);
+      const { entry, reason, start, noPage } = entryOf(read, settings);
       const where = vercelRootOf(read, exists, folders.workspace);
       const data: ViteData = {
         entry,
@@ -223,7 +226,7 @@ export function viteSpa(fw: ViteFramework): Integration {
       return {
         integration: fw.id, dir, root, packageManager,
         parts: {
-          browser: { file: entry, kind: fw.entry.kind, ...(entry ? {} : { manualReason: reason! }) },
+          browser: { file: entry, kind: fw.entry.kind, ...(entry ? {} : { manualReason: reason!, ...(noPage ? { noPage } : {}) }) },
           server: { file: kind === "verify-file" && typeof data.publicDir === "string" ? verifyPath(data.publicDir) : null, kind },
         },
         facts: [["Found", `${fw.label} · ${entry ?? "entry not found"} · ${data.typescript ? "TypeScript" : "JavaScript"} · ${packageManager}`]],
@@ -243,18 +246,18 @@ export function viteSpa(fw: ViteFramework): Integration {
       const have = declared(input.read);
       if (input.parts.browser) {
         const snippet = fw.entry.snippet(input.publicKey);
-        let started = false;
         const got = data.entry ? tryRead(input.read, data.entry) : { text: null };
-        if ("refused" in got) plan.manual.push({ file: data.entry!, reason: got.refused, snippet, part: "browser" });
-        else if (!data.entry || got.text === null) plan.manual.push({ file: data.entry ?? "index.html", reason: data.entryReason ?? `${data.entry} (named in index.html) does not exist.`, snippet, part: "browser" });
+        const e = data.entry && "text" in got && got.text !== null ? fw.entry.add(got.text, data.entry, input.publicKey, have) : null;
+        const start = data.pageStart ?? null;
+        // Parlox already starts in the page: no second start, and no package for one, whatever else would keep the
+        // wizard out of the entry; with the wizard's own start already there, the review says the page starts twice.
+        if (start && !(e?.ok && !e.changed)) plan.manual.push({ file: start.file, reason: pageStartReason(start), snippet: nothingToAdd(start), part: "browser" });
         else {
-          const e = fw.entry.add(got.text, data.entry, input.publicKey, have);
-          if (!e.ok) plan.manual.push({ file: data.entry, reason: e.reason, snippet: e.snippet, part: "browser" });
-          // Parlox already starts in the page: no second start, and no package for one.
-          else if (e.changed && data.pageStart) { plan.manual.push({ file: data.entry, reason: pageStartReason(data.pageStart, data.entry), snippet, part: "browser" }); started = true; }
+          if ("refused" in got) plan.manual.push({ file: data.entry!, reason: got.refused, snippet, part: "browser" });
+          else if (!data.entry || got.text === null || !e) plan.manual.push({ file: data.entry ?? "index.html", reason: data.entryReason ?? `${data.entry} (named in index.html) does not exist.`, snippet, part: "browser" });
+          else if (!e.ok) plan.manual.push({ file: data.entry, reason: e.reason, snippet: e.snippet, part: "browser" });
           else if (e.changed) { plan.changes.push({ path: data.entry, before: got.text, after: e.code, purpose: "browser part" }); plan.warnings.push(TAG_MANAGER_NOTE); }
-        }
-        if (!started) {
+          else if (start) plan.warnings.push(twiceNote(start, data.entry));
           const pins = packagesToAdd(have, [["@parlox/browser", input.versions.browser]]);
           packages.push(...pins.add);
           plan.warnings.push(...pins.notes);

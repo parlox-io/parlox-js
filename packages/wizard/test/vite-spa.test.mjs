@@ -80,6 +80,8 @@ for (const fw of Object.keys(FRAMEWORKS)) {
 const TAG = `<script async src="https://gateway.parlox.io/sdk/1.0.3/parlox.js" data-key="${PK}" data-consent="required"></script>`;
 const page = (fw, head, body = "") => `<!doctype html>\n<html>\n  <head>\n    <title>shop</title>\n${head}  </head>\n  <body>\n    <div id="app"></div>\n${body}    <script type="module" src="/${FRAMEWORKS[fw].entry}"></script>\n  </body>\n</html>\n`;
 const TAG_MANAGER = "Parlox starts once per page, with the options of whichever start runs first. If a tag manager (Google Tag Manager, say) also loads Parlox's tag on this site, the wizard cannot see it in your files: keep one of the two, since a start there with data-consent=\"required\" could otherwise be set aside.";
+const startReason = (line) => `index.html already starts Parlox on line ${line} (a Parlox script tag, or a module that loads @parlox/browser), so the wizard adds no second start: Parlox keeps the first start of a page, and another one could run first and set aside that start's options (data-consent="required", say). If that is this site's own start, nothing more is needed; to start Parlox from the app's code instead, remove it and run the wizard again.`;
+const nothingToAdd = (line) => `Nothing to add while index.html starts Parlox (line ${line}).`;
 const planOf = (dir, host = { id: "netlify", label: "Netlify", where: "", docs: null, vercelDir: null }) => planUnit(unitOf(dir), { publicKey: PK, verifyToken: "vt_fake", host }, { read: reader(dir), git });
 
 for (const fw of Object.keys(FRAMEWORKS)) {
@@ -92,8 +94,7 @@ for (const fw of Object.keys(FRAMEWORKS)) {
       const dir = spa(fw, { "netlify.toml": "", "index.html": page(fw, head, body) });
       const plan = planOf(dir);
       assert.deepEqual(plan.changes.map((c) => c.path), ["public/.well-known/parlox-verify"], `${what}: the entry is not changed`);
-      assert.deepEqual(plan.manual.map((m) => [m.file, m.part]), [[entry, "browser"]], what);
-      assert.equal(plan.manual[0].reason, `index.html already starts Parlox on line ${line} (a Parlox script tag, or a module that loads @parlox/browser), so the wizard adds no second start to ${entry}: Parlox keeps the first start of a page, and one in ${entry} could run first and set aside that start's options (data-consent="required", say). If that is this site's own start, nothing more is needed; to start Parlox from ${entry} instead, remove it and run the wizard again.`, what);
+      assert.deepEqual(plan.manual, [{ file: "index.html", reason: startReason(line), snippet: nothingToAdd(line), part: "browser" }], what);
       assert.equal(plan.install, null, `${what}: no package for a start that is already there`);
       assert.equal(plan.warnings.includes(TAG_MANAGER), false, what);
     }
@@ -102,13 +103,30 @@ for (const fw of Object.keys(FRAMEWORKS)) {
     const c = planOf(commented);
     assert.deepEqual(c.changes.map((x) => x.path), [entry, "public/.well-known/parlox-verify"]);
     assert.ok(c.warnings.includes(TAG_MANAGER), c.warnings.join("\n"));
-    // Already installed by the wizard, with a tag as well: nothing to change, nothing said about a second start.
+    // Already installed by the wizard, with a tag added since: nothing to change, and the review says the page now
+    // starts Parlox twice.
     const installed = spa(fw, { "netlify.toml": "" });
     applyPlan(installed, planOf(installed));
     writeFileSync(join(installed, "index.html"), page(fw, `    ${TAG}\n`));
     const again = planOf(installed);
     assert.deepEqual([again.changes, again.manual], [[], []]);
     assert.equal(again.warnings.includes(TAG_MANAGER), false);
+    assert.ok(again.warnings.includes(`index.html also starts Parlox, on line 5, beside the wizard's start in ${entry}: the page starts Parlox twice, and only the first start's options apply (a data-consent="required" there could be set aside). Keep one of the two.`), again.warnings.join("\n"));
+  });
+
+  test(`${label}: a Parlox start in index.html comes before any other reason the entry cannot be edited: one step that says so, nothing to paste, no package`, () => {
+    const refused = fw === "vue" ? "import { createApp } from 'vue'\nconst init = 1\ncreateApp({}).mount('#app')\n" : "console.log('no render call')\n";
+    for (const [what, files] of [
+      ["an entry the edit refuses", { [entry]: refused }],
+      ["no module script with a src", { "index.html": page(fw, `    ${TAG}\n`).replace(`<script type="module" src="/${entry}"></script>`, `<script type="module">import './${entry}'</script>`) }],
+      ["the entry file missing", { [entry]: undefined }],
+    ]) {
+      const dir = spa(fw, { "netlify.toml": "", "index.html": page(fw, `    ${TAG}\n`), ...files });
+      const plan = planOf(dir);
+      assert.deepEqual(plan.changes.map((c) => c.path), ["public/.well-known/parlox-verify"], what);
+      assert.deepEqual(plan.manual, [{ file: "index.html", reason: startReason(5), snippet: nothingToAdd(5), part: "browser" }], what);
+      assert.equal(plan.install, null, what);
+    }
   });
 }
 
@@ -158,5 +176,29 @@ for (const fw of Object.keys(FRAMEWORKS)) {
     // Express 5 does not serve files inside .well-known/: the tag only.
     const five = expressWithWidgets(fw, "^5.1.0");
     assert.deepEqual(planUnit(unitOf(five), { publicKey: PK, verifyToken: "vt_fake", host: RENDER }, { read: reader(five), git }).changes.map((c) => c.path), ["views/index.ejs"]);
+  });
+}
+
+for (const fw of Object.keys(FRAMEWORKS)) {
+  const { entry, label } = FRAMEWORKS[fw];
+  test(`${label} with an index.html whose entry the wizard cannot find, beside Express pages: the Vite app keeps its step by hand and its reason; only with no index.html do the pages take the browser part`, () => {
+    const files = (html) => ({
+      pkg: { scripts: { start: "node server.js" }, dependencies: { express: "^4.21.2", ejs: "^3.1.10" } }, "render.yaml": "", "index.html": html,
+      "server.js": "import express from 'express'\nconst app = express()\napp.set('view engine', 'ejs')\napp.use(express.static('dist'))\napp.get('/admin', (q, s) => s.render('admin'))\napp.listen(3000)\n",
+      "views/admin.ejs": "<!doctype html>\n<html>\n<head>\n</head>\n<body>admin</body>\n</html>\n",
+    });
+    for (const [what, html, why] of [
+      ["an inline module script", `<div id=app></div>\n<script type=module>import './${entry}'</script>\n`, /^index\.html has no single <script type="module" src="…"> of the app's own\.$/],
+      ["two module scripts", `<script type="module" src="/${entry}"></script>\n<script type="module" src="/src/other.js"></script>\n`, /^index\.html has no single <script type="module" src="…"> of the app's own\.$/],
+      ["an entry outside the folder", `<script type="module" src="../shared/main.js"></script>\n`, /^The module script in index\.html is outside this folder\.$/],
+    ]) {
+      const dir = spa(fw, files(html));
+      const u = unitOf(dir);
+      assert.equal(u.browser.integration, `vite-${fw}`, what);
+      const plan = planUnit(u, { publicKey: PK, verifyToken: "vt_fake", host: RENDER }, { read: reader(dir), git });
+      assert.equal(plan.changes.some((c) => c.path.startsWith("views/")), false, `${what}: the pages are left alone`);
+      assert.deepEqual(plan.manual.map((m) => [m.file, m.part]), [["index.html", "browser"]], what);
+      assert.match(plan.manual[0].reason, why, what);
+    }
   });
 }
