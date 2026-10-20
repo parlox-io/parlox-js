@@ -48,6 +48,16 @@ test("people are never reported; automated page requests are", () => {
   assert.equal(p.shouldReport(req({})), true, "no user agent at all is automated");
 });
 
+test("a signed request is reported even with a browser's user agent and headers", () => {
+  const p = createParlox({ secretKey: SECRET, endpoint, ipHeader: null });
+  const sig = { "signature-input": 'sig1=("@authority");created=1700000000;keyid="poqkLGiymh_W0uP6PZFw-dvez3QJT5SolqXBCW38r0U"', signature: "sig1=:abc=:" };
+  assert.equal(p.shouldReport(req({ ...HUMAN, "signature-agent": '"https://openai.com"', ...sig })), true, "Web Bot Auth: Signature-Agent");
+  assert.equal(p.shouldReport(req({ ...HUMAN, ...sig })), false, "Signature-Input without Signature-Agent is not Web Bot Auth: the gateway could not verify it");
+  assert.equal(p.shouldReport(req({ ...HUMAN, "signature-agent": '"https://openai.com"' })), false, "Signature-Agent alone is not a signature");
+  assert.equal(p.shouldReport(req({ ...HUMAN, "signature-agent": "", ...sig })), false, "an empty Signature-Agent is no header");
+  assert.equal(p.shouldReport(req({ ...HUMAN, "signature-agent": '"https://openai.com"', ...sig }, { path: "/logo.png" })), false, "assets stay out, signed or not");
+});
+
 test("assets, non-GET, Parlox's own checker and the verify path are skipped", () => {
   const p = createParlox({ secretKey: SECRET, endpoint, ipHeader: null });
   assert.equal(p.shouldReport(req(CHATGPT, { path: "/logo.png" })), false);

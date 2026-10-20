@@ -400,7 +400,12 @@ export function createParlox(options: ParloxServerOptions = {}): Parlox {
     if (!includeApi && API_PREFIX.test(req.path)) return false;
     if (req.header("x-parlox-audit")) return false; // Parlox's own page checks are not visits
     const ua = req.header("user-agent") ?? "";
-    return !ua || AUTOMATION_HINT.test(ua) || !req.header("sec-fetch-mode") || !req.header("accept-language");
+    // A Web Bot Auth signature (Signature-Agent with Signature-Input, the pair the gateway verifies; an empty value is
+    // no header, as for the browser headers below) is reported whatever the user agent and headers: a signer that runs
+    // a real browser sends a browser's headers and would otherwise never be seen. The gateway verifies the signature;
+    // one that does not verify is written as an unidentified bot carrying the failed claim, never as a name.
+    const signed = !!req.header("signature-agent") && !!req.header("signature-input");
+    return !ua || AUTOMATION_HINT.test(ua) || signed || !req.header("sec-fetch-mode") || !req.header("accept-language");
   }
 
   // The event for one request (the caller has checked shouldReport).
