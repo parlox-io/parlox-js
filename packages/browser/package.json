@@ -80,7 +80,7 @@
     }
   },
   "devDependencies": {
-    "@happy-dom/global-registrator": "^20.14.5",
+    "@happy-dom/global-registrator": "^21.0.4",
     "@types/react": "^19.0.0",
     "esbuild": "^0.28.2",
     "react": "^19.3.0",
